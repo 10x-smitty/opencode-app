@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/big-pickle",
+  "default_agent": "ask-artie",
+  "share": "disabled",
+  "watcher": {
+    "ignore": ["node_modules/**", ".next/**", "graphify-out/**", "volumes/**"]
+  },
+  "permission": {
+    "skill": {
+      "*": "deny",
+      "ask-artie-*": "allow"
+    }
+  }
+}

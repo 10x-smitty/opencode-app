@@ -1,0 +1,7 @@
+[   77829ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:8000/auth/v1/token?grant_type=password:0
+[   81297ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:8000/auth/v1/token?grant_type=password:0
+[  114784ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:8000/auth/v1/token?grant_type=password:0
+[  116646ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:8000/auth/v1/token?grant_type=password:0
+[  155751ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/chat:0
+[  370204ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/chat:0
+[  402983ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/chat:0

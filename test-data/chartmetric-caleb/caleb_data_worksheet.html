@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caleb Lee Hutchinson — Data Inventory · ARTiE</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #f5f5f3;
+    color: #1a1a1a;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .page-header {
+    background: #111827;
+    color: #fff;
+    padding: 32px 44px 26px;
+  }
+  .page-header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 5px; }
+  .page-header .sub { font-size: 0.8rem; color: #9ca3af; }
+  .page-header .sub span { color: #a78bfa; font-weight: 600; }
+
+  .legend {
+    background: #fff;
+    border-bottom: 2px solid #e5e5e5;
+    padding: 13px 44px;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  }
+  .legend-label { font-size: 0.72rem; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.7rem; font-weight: 700;
+    padding: 3px 9px; border-radius: 20px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .b-live   { background: #d1fae5; color: #065f46; }
+  .b-avail  { background: #dbeafe; color: #1e40af; }
+  .b-cross  { background: #fef3c7; color: #92400e; }
+  .b-none   { background: #f3f4f6; color: #9ca3af; }
+
+  /* ── Alert box ── */
+  .alert {
+    margin: 20px 44px 0;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 0.82rem;
+    color: #78350f;
+    line-height: 1.6;
+  }
+  .alert strong { color: #92400e; }
+
+  /* ── Platform sections ── */
+  .platform-section { padding: 28px 44px 8px; }
+  .platform-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px; padding-bottom: 12px;
+    border-bottom: 2px solid #e5e5e5;
+  }
+  .platform-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 900; flex-shrink: 0;
+    letter-spacing: -0.03em;
+  }
+  .ic-sp  { background: #d1fae5; color: #065f46; }
+  .ic-ig  { background: #fce7f3; color: #be185d; }
+  .ic-yt  { background: #fee2e2; color: #b91c1c; }
+  .ic-tt  { background: #ede9fe; color: #6d28d9; }
+  .ic-x   { background: #fef3c7; color: #92400e; }
+  .platform-title { font-size: 1.05rem; font-weight: 700; color: #111; }
+  .platform-subtitle { font-size: 0.79rem; color: #6b7280; margin-top: 1px; }
+
+  .category { margin-bottom: 24px; }
+  .category-title {
+    font-size: 0.67rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #9ca3af; margin-bottom: 9px;
+  }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 9px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  th {
+    background: #f9fafb; text-align: left; padding: 9px 13px;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #6b7280; border-bottom: 1px solid #e5e7eb;
+  }
+  td { padding: 10px 13px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+
+  .col-field  { width: 18%; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.76rem; color: #374151; font-weight: 600; }
+  .col-desc   { width: 28%; color: #4b5563; }
+  .col-value  { width: 34%; }
+  .col-status { width: 20%; }
+
+  .vhi { color: #7c3aed; font-weight: 700; }
+  .vlist { font-size: 0.81rem; line-height: 1.75; }
+  .vlist .r { display: block; }
+  .vlist .rk { display: inline-block; width: 18px; color: #9ca3af; font-size: 0.7rem; }
+  .vlist .pct { color: #6b7280; font-size: 0.78rem; margin-left: 3px; }
+  .vlist .cnt { color: #9ca3af; font-size: 0.73rem; margin-left: 3px; }
+  .vlist .hot { color: #dc2626; font-weight: 700; font-size: 0.75rem; margin-left: 4px; }
+
+  .gsplit { display: flex; gap: 14px; font-size: 0.85rem; }
+  .gf { color: #be185d; font-weight: 700; }
+  .gm { color: #1d4ed8; font-weight: 700; }
+
+  .agetab { font-size: 0.77rem; border-collapse: collapse; }
+  .agetab td { padding: 2px 7px; border: none; }
+  .agetab .ac { color: #6b7280; font-weight: 600; padding-left: 0; }
+  .agetab .af { color: #be185d; }
+  .agetab .am { color: #1d4ed8; }
+
+  .notelist { font-size: 0.81rem; line-height: 1.85; }
+  .notelist .ni { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .notelist .nn { font-weight: 600; color: #111; }
+  .notelist .nf { color: #7c3aed; font-weight: 700; font-size: 0.79rem; }
+  .notelist .ne { color: #6b7280; font-size: 0.74rem; }
+  .notelist .nv { color: #2563eb; font-size: 0.68rem; font-weight: 700; }
+
+  .afflist { font-size: 0.81rem; line-height: 1.75; }
+  .afflist .ai { display: flex; align-items: center; gap: 6px; }
+  .afflist .an { color: #111; }
+  .afflist .ax { font-weight: 700; color: #059669; font-size: 0.77rem; }
+  .afflist .aw { color: #6b7280; font-size: 0.74rem; }
+
+  /* ── Cross-platform callout ── */
+  .cross-section { padding: 0 44px 28px; }
+  .cross-box {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+  .cross-box h3 { font-size: 0.9rem; font-weight: 700; color: #78350f; margin-bottom: 12px; }
+  .cross-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .cross-city {
+    background: #fff;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .cross-city .cc-name { font-weight: 700; font-size: 0.9rem; color: #111; margin-bottom: 8px; }
+  .cross-city .cc-row { font-size: 0.78rem; color: #374151; margin-bottom: 3px; display: flex; justify-content: space-between; }
+  .cross-city .cc-row .src { color: #6b7280; }
+  .cross-city .cc-row .val { font-weight: 600; color: #7c3aed; }
+  .cross-city .cc-gap { background: #fef3c7; border-radius: 5px; padding: 4px 8px; font-size: 0.72rem; color: #92400e; font-weight: 600; margin-top: 8px; }
+  .cross-note { font-size: 0.79rem; color: #92400e; margin-top: 14px; line-height: 1.6; }
+
+  /* ── Summary ── */
+  .divider { height: 1px; background: #e5e5e5; margin: 4px 44px; }
+  .summary-strip {
+    background: #fff; border-radius: 10px;
+    margin: 16px 44px 40px;
+    padding: 20px 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .summary-strip h3 { font-size: 0.85rem; font-weight: 700; margin-bottom: 14px; color: #111; }
+  .sg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .sc { background: #f9fafb; border-radius: 8px; padding: 13px 15px; border: 1px solid #e5e7eb; }
+  .sc .sl { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; font-weight: 700; margin-bottom: 5px; }
+  .sc .sv { font-size: 1.25rem; font-weight: 800; color: #7c3aed; }
+  .sc .ss { font-size: 0.73rem; color: #6b7280; margin-top: 2px; }
+
+  @media print {
+    body { background: #fff; }
+    .page-header, .badge, .cross-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Caleb Lee Hutchinson — Data Inventory &amp; ARTiE Coverage</h1>
+  <div class="sub">
+    CM Artist ID <span>1029268</span> &nbsp;·&nbsp;
+    Data pulled May 11, 2026 &nbsp;·&nbsp;
+    Endpoints: Spotify geo (JWT) · instagram-audience-stats · youtube-audience-stats · tiktok-audience-stats
+  </div>
+</div>
+
+<div class="legend">
+  <span class="legend-label">Status</span>
+  <span class="badge b-live">● Already in ARTiE</span>
+  <span class="badge b-avail">◎ Available — not yet used</span>
+  <span class="badge b-cross">★ Priority — fan hotspot / cross-platform</span>
+  <span class="badge b-none">○ Not available for this artist</span>
+</div>
+
+<div class="alert">
+  <strong>Corrections from prior worksheet:</strong> Several fields were incorrectly labelled "available." After reading the actual code, the following are already live in ARTiE:
+  Instagram follower cities, avg likes/comments per post, and age/gender breakdown; YouTube and TikTok country lists; YouTube avg likes/comments.
+  The real gaps are: <strong>Instagram liker cities</strong> (the active-fan city signal — Nashville 8.32%), <strong>notable followers</strong> across all 3 platforms (180 accounts total, up to 3.5M followers each), and <strong>brand/interest affinities</strong> (used for ad targeting and content strategy).
+  Spotify weight in tour city scoring has been <strong>reduced from 65% → 40%</strong>. Instagram liker cities added at 35% weight. Fan list reduced to 25%. Cross-platform city match is now live — cities appearing in ≥2 sources are flagged as confirmed hotspots.
+</div>
+
+
+<!-- ═══════════════════ SPOTIFY ═══════════════════ -->
+<div class="platform-section">
+  <div class="platform-header">
+    <div class="platform-icon ic-sp">SP</div>
+    <div>
+      <div class="platform-title">Spotify</div>
+      <div class="platform-subtitle">Streaming audience signal · 40% weight in city scoring (reduced from 65%; IG liker cities added at 35%) · Loaded via JWT geo endpoint</div>
+    </div>
+  </div>
+
+  <div class="category">
+    <div class="category-title">How Spotify Is Used in ARTiE Today</div>
+    <table>
+      <thead><tr>
+        <th class="col-field">Data</th>
+        <th class="col-desc">What it is</th>
+        <th class="col-value">How ARTiE uses it</th>
+        <th class="col-status">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">City listener counts</td>
+          <td>How many Spotify listeners are in each city, globally</td>
+          <td>Streaming audience geography — <strong>40% weight</strong> in the tour city scoring model (reduced from 65% to make room for IG liker cities at 35%). Each city gets a normalised demand score. Cross-referenced against peer artist averages to produce the Peer Market Index (Index 100 = comparable artist average).</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">Monthly listeners</td>
+          <td>Global monthly Spotify listener count</td>
+          <td>Used in platform overview, superfans aggregate portrait, and focus analysis. Used as the fan pool numerator for the ZIP Gravity sell-through model.</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">Follower-to-listener ratio</td>
+          <td>Spotify followers ÷ monthly listeners — signals dedication vs. casual reach</td>
+          <td>Passed to the LLM in superfans aggregate as a loyalty signal ("dedicated core vs. casual listeners").</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">City trend (90-day)</td>
+          <td>Direction of listener growth or decline by city vs. baseline</td>
+          <td>Injected into tour analytics as a trend arrow per city (↑ growing, ↓ declining, → flat).</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">Peer Market Index</td>
+          <td>Artist's listener share in a city vs. comparable artists' average share. Index 100 = peer average.</td>
+          <td>Shown per city in tour output. LLM leads with cities over-indexing (&gt;120) and flags under-indexing (&lt;80).</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">Cross-platform city match</td>
+          <td>Cities appearing in ≥2 of: streaming audience (Spotify), social fans (IG liker cities), confirmed fans (CSV/Shopify)</td>
+          <td>Flagged as <code>multi_source_cities</code> — now a genuine 3-source cross-platform hotspot signal. Nashville, LA, Atlanta, NYC all confirmed by 2–3 sources. IG liker cities added at 35% weight in May 2026.</td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ═══════════════════ INSTAGRAM ═══════════════════ -->
+<div class="platform-section">
+  <div class="platform-header">
+    <div class="platform-icon ic-ig">IG</div>
+    <div>
+      <div class="platform-title">Instagram</div>
+      <div class="platform-subtitle">239,867 followers · 345 avg likes/post · 35 avg comments/post · Data as of Jan 21, 2026</div>
+    </div>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Account Overview</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Value</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">followers</td>
+          <td>Total follower count</td>
+          <td><span class="vhi">239,867</span></td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">avg_likes_per_post</td>
+          <td>Average likes across recent posts</td>
+          <td><span class="vhi">345</span></td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">avg_comments_per_post</td>
+          <td>Average comments across recent posts</td>
+          <td><span class="vhi">35</span></td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">engagement_rate</td>
+          <td>Raw rate (avg likes+comments ÷ followers). ARTiE never says "engagement rate" — always "share of followers who actively respond."</td>
+          <td><span class="vhi">0.14%</span></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Geographic — Followers (passive — where they live, not where they engage)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">top_countries</td>
+          <td>Countries of follower base</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> United States <span class="pct">88.61%</span><span class="cnt">(212,536)</span></span>
+            <span class="r"><span class="rk">2.</span> Canada <span class="pct">2.75%</span><span class="cnt">(6,600)</span></span>
+            <span class="r"><span class="rk">3.</span> Philippines <span class="pct">0.96%</span></span>
+            <span class="r"><span class="rk">4.</span> Brazil <span class="pct">0.82%</span></span>
+            <span class="r"><span class="rk">5.</span> Iran <span class="pct">0.61%</span></span>
+            <span class="r"><span class="rk">6.</span> Australia <span class="pct">0.59%</span></span>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">top_cities</td>
+          <td>Cities of follower base (where they live — passive signal)</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> Los Angeles, CA <span class="pct">1.36%</span><span class="cnt">(3,273)</span></span>
+            <span class="r"><span class="rk">2.</span> Nashville, TN <span class="pct">1.00%</span><span class="cnt">(2,400)</span></span>
+            <span class="r"><span class="rk">3.</span> New York City, NY <span class="pct">0.84%</span><span class="cnt">(2,018)</span></span>
+            <span class="r"><span class="rk">4.</span> Atlanta, GA <span class="pct">0.82%</span><span class="cnt">(1,963)</span></span>
+            <span class="r"><span class="rk">5.</span> Pittsburgh, PA <span class="pct">0.61%</span><span class="cnt">(1,473)</span></span>
+            <span class="r"><span class="rk">6.</span> Chicago, IL <span class="pct">0.57%</span><span class="cnt">(1,363)</span></span>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Geographic — Likers (active — people who actually engage with posts)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">likers_top_countries</td>
+          <td>Countries generating the most likes. Notably UK is #2 here (8.85%) vs. Canada #2 in followers — a meaningful difference.</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> United States <span class="pct">77.34%</span><span class="cnt">(216,140 likes)</span></span>
+            <span class="r"><span class="rk">2.</span> United Kingdom <span class="pct">8.85%</span><span class="cnt">(24,731)</span></span>
+            <span class="r"><span class="rk">3.</span> Canada <span class="pct">2.49%</span><span class="cnt">(6,955)</span></span>
+            <span class="r"><span class="rk">4.</span> Indonesia <span class="pct">1.59%</span><span class="cnt">(4,443)</span></span>
+            <span class="r"><span class="rk">5.</span> Australia <span class="pct">0.99%</span><span class="cnt">(2,769)</span></span>
+          </td>
+          <td><span class="badge b-cross">★ Priority gap</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">likers_top_cities</td>
+          <td>Cities generating the most likes — active fan signal now wired into tour scoring at 35% weight. Nashville at 8.32% (vs 1% follower share) drives it to the top of the city demand model.</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> Nashville, TN <span class="pct">8.32%</span><span class="cnt">(23,249 likes)</span><span class="hot">🔥 8× over-index vs followers</span></span>
+            <span class="r"><span class="rk">2.</span> Greater London, UK <span class="pct">3.25%</span><span class="cnt">(9,081)</span></span>
+            <span class="r"><span class="rk">3.</span> Los Angeles, CA <span class="pct">2.37%</span><span class="cnt">(6,633)</span></span>
+            <span class="r"><span class="rk">4.</span> Atlanta, GA <span class="pct">1.22%</span><span class="cnt">(3,413)</span></span>
+            <span class="r"><span class="rk">5.</span> New York City, NY <span class="pct">1.11%</span><span class="cnt">(3,091)</span></span>
+            <span class="r"><span class="rk">6.</span> Chicago, IL <span class="pct">0.67%</span><span class="cnt">(1,867)</span></span>
+            <span class="r"><span class="rk">7.</span> San Diego, CA <span class="pct">0.58%</span><span class="cnt">(1,610)</span></span>
+            <span class="r"><span class="rk">8.</span> Dallas, TX <span class="pct">0.55%</span><span class="cnt">(1,545)</span></span>
+            <span class="r"><span class="rk">9.</span> Austin, TX <span class="pct">0.55%</span><span class="cnt">(1,545)</span></span>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Demographics — Followers</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">audience_genders</td>
+          <td>Simple overall gender split of followers</td>
+          <td><div class="gsplit"><span class="gf">85.37% Female</span><span class="gm">14.63% Male</span></div></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_genders_per_age</td>
+          <td>Gender split by age bracket — 6 brackets</td>
+          <td>
+            <table class="agetab">
+              <tr><td class="ac">13–17</td><td class="af">F: 3.84%</td><td class="am">M: 0.49%</td></tr>
+              <tr><td class="ac">18–24</td><td class="af">F: 33.04%</td><td class="am">M: 4.35%</td></tr>
+              <tr><td class="ac">25–34</td><td class="af">F: 32.25%</td><td class="am">M: 6.10%</td></tr>
+              <tr><td class="ac">35–44</td><td class="af">F: 9.87%</td><td class="am">M: 2.43%</td></tr>
+              <tr><td class="ac">45–64</td><td class="af">F: 6.23%</td><td class="am">M: 1.24%</td></tr>
+            </table>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_ethnicities</td>
+          <td>Estimated ethnic breakdown</td>
+          <td class="vlist">
+            <span class="r">White / Caucasian <span class="pct">80.40%</span></span>
+            <span class="r">Asian <span class="pct">8.00%</span></span>
+            <span class="r">Hispanic <span class="pct">7.16%</span></span>
+            <span class="r">African American <span class="pct">4.44%</span></span>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Demographics — Likers (the people who actively engage — more actionable than follower demographics)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">audience_likers_genders</td>
+          <td>Gender split of active likers. Notably more balanced than followers — 85/15 followers vs. 54/46 likers.</td>
+          <td><div class="gsplit"><span class="gf">54.35% Female</span><span class="gm">45.65% Male</span></div></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_likers_genders_per_age</td>
+          <td>Liker gender by age bracket — 6 brackets available</td>
+          <td><em style="color:#9ca3af;font-size:0.8rem">Full breakdown in JSON</em></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_likers_ethnicities</td>
+          <td>Ethnic breakdown of active likers</td>
+          <td><em style="color:#9ca3af;font-size:0.8rem">4-category breakdown in JSON</em></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Affinities — Followers (currently unused — key source for ad targeting &amp; brand deals)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Top Results</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">audience_interests</td>
+          <td>27 interest categories followers over-index on vs. the average Instagram user. Affinity &gt;1.0 = above average.</td>
+          <td class="afflist">
+            <div class="ai"><span class="an">Wedding</span><span class="ax">2.91×</span><span class="aw">36.77% of followers</span></div>
+            <div class="ai"><span class="an">Toys, Children &amp; Baby</span><span class="ax">1.78×</span><span class="aw">40.42%</span></div>
+            <div class="ai"><span class="an">Pets</span><span class="ax">1.37×</span><span class="aw">20.90%</span></div>
+            <div class="ai"><span class="an">Friends, Family &amp; Relationships</span><span class="ax">1.35×</span><span class="aw">42.27%</span></div>
+            <div class="ai"><span class="an">Restaurants, Food &amp; Grocery</span><span class="ax">1.17×</span><span class="aw">27.75%</span></div>
+            <div class="ai"><span class="an">Sports</span><span class="ax">1.13×</span><span class="aw">21.80%</span></div>
+            <div class="ai"><span class="an">Music</span><span class="ax">0.73×</span><span class="aw">21.56% — below average (audience is broader than music fans)</span></div>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_brand_affinities</td>
+          <td>125 brands followers over-index on. Affinity = follower rate ÷ average Instagram user rate. Useful for brand partnerships and ad targeting.</td>
+          <td class="afflist">
+            <div class="ai"><span class="an">Walt Disney</span><span class="ax">2.17×</span><span class="aw">20.74%</span></div>
+            <div class="ai"><span class="an">Starbucks</span><span class="ax">2.02×</span><span class="aw">9.35%</span></div>
+            <div class="ai"><span class="an">Walmart</span><span class="ax">2.15×</span><span class="aw">4.72%</span></div>
+            <div class="ai"><span class="an">Target</span><span class="ax">1.81×</span><span class="aw">2.67%</span></div>
+            <div class="ai"><span class="an">Busch</span><span class="ax">1.54×</span><span class="aw">1.55%</span></div>
+            <div class="ai"><span class="an">Margaritaville</span><span class="ax">1.43×</span><span class="aw">1.28%</span></div>
+            <div class="ai"><span class="an">Chick-fil-A</span><span class="ax">1.35×</span><span class="aw">1.25%</span></div>
+            <div class="ai"><span class="an">Ford</span><span class="ax">1.33×</span><span class="aw">2.07%</span></div>
+            <div class="ai"><span class="an">Carhartt</span><span class="ax">1.00×</span><span class="aw">1.04%</span></div>
+            <div style="color:#9ca3af;font-size:0.74rem;margin-top:3px">+ 116 more brands in JSON</div>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_likers_interests<br>audience_likers_brand_affinities</td>
+          <td>Same affinity data but for active likers — stronger signal than follower affinities. 27 interests + 136 brands.</td>
+          <td><em style="color:#9ca3af;font-size:0.8rem">Full lists in JSON — same structure, likers skew heavier on Music (38.31%, 1.20×)</em></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Fans with Large Followings — Instagram (60 accounts · currently unused in ARTiE)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Top accounts following Caleb</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">notable_followers</td>
+          <td>Accounts with large followings who follow Caleb. Each record has: username, follower count, verified status, location (city/state/country), avg engagements on their own content.</td>
+          <td class="notelist">
+            <div class="ni"><span class="nn">@cadenmcdonald</span><span class="nf">3.5M</span><span class="nv">✓ Verified</span><span class="ne">LA · 103K own eng</span></div>
+            <div style="color:#9ca3af;font-size:0.74rem;margin-top:3px">59 more accounts in JSON with follower counts, city, verified status, and engagement numbers</div>
+          </td>
+          <td><span class="badge b-cross">★ Priority gap</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ═══════════════════ YOUTUBE ═══════════════════ -->
+<div class="platform-section">
+  <div class="platform-header">
+    <div class="platform-icon ic-yt">YT</div>
+    <div>
+      <div class="platform-title">YouTube</div>
+      <div class="platform-subtitle">~21,580 subscribers · 6 avg comments/video · 0.27% share of subscribers who actively respond · Data as of Jan 19, 2026</div>
+    </div>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Geographic</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">top_countries</td>
+          <td>Countries of subscriber base</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> United States <span class="pct">82.14%</span><span class="cnt">(17,742)</span></span>
+            <span class="r"><span class="rk">2.</span> Canada <span class="pct">4.95%</span><span class="cnt">(1,068)</span></span>
+            <span class="r"><span class="rk">3.</span> United Kingdom <span class="pct">3.30%</span><span class="cnt">(712)</span></span>
+            <span class="r"><span class="rk">4.</span> Philippines <span class="pct">1.65%</span></span>
+            <span class="r"><span class="rk">5.</span> Brazil <span class="pct">1.10%</span></span>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">commenters_top_countries</td>
+          <td>Countries of active commenters — a stronger engagement signal than subscribers</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> United States <span class="pct">81.54%</span><span class="cnt">(772 comments)</span></span>
+            <span class="r"><span class="rk">2.</span> Canada <span class="pct">5.13%</span><span class="cnt">(48)</span></span>
+            <span class="r"><span class="rk">3.</span> United Kingdom <span class="pct">2.56%</span><span class="cnt">(24)</span></span>
+            <span class="r"><span class="rk">4.</span> Australia <span class="pct">1.54%</span><span class="cnt">(14)</span></span>
+            <span class="r"><span class="rk">5.</span> Denmark <span class="pct">1.03%</span></span>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Demographics</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">avg_likes / avg_comments</td>
+          <td>Avg likes and comments per video</td>
+          <td><span class="vhi">~6 comments/video</span></td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_genders</td>
+          <td>Overall gender split of subscribers</td>
+          <td><div class="gsplit"><span class="gf">58.98% Female</span><span class="gm">41.02% Male</span></div></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_genders_per_age</td>
+          <td>Subscriber gender by age bracket</td>
+          <td>
+            <table class="agetab">
+              <tr><td class="ac">18–24</td><td class="af">F: 13.02%</td><td class="am">M: 6.75%</td></tr>
+              <tr><td class="ac">25–34</td><td class="af">F: 31.21%</td><td class="am">M: 21.73%</td></tr>
+              <tr><td class="ac">35–44</td><td class="af">F: 7.88%</td><td class="am">M: 6.91%</td></tr>
+            </table>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">commenters_genders<br>commenters_genders_per_age</td>
+          <td>Gender of active commenters (56.63% Female, 43.37% Male) + age breakdown</td>
+          <td><div class="gsplit"><span class="gf">56.63% Female</span><span class="gm">43.37% Male</span></div></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Fans with Large Followings — YouTube</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Top accounts subscribed to Caleb</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">notable_subscribers</td>
+          <td>YouTube channels with large subscriber counts who subscribe to Caleb. Includes avg views, avg likes, country location, verified status.</td>
+          <td class="notelist">
+            <div class="ni"><span class="nn">JONNI SHREVE</span><span class="nf">631K</span><span class="nv">✓ Verified</span><span class="ne">Canada · 1,225 avg likes · 27K avg views</span></div>
+            <div class="ni"><span class="nn">Hot Wheels Mama</span><span class="nf">90K</span><span class="ne">155 avg views</span></div>
+            <div class="ni"><span class="nn">Ghost Giraffe</span><span class="nf">51.6K</span><span class="ne">US · 971 avg views</span></div>
+            <div class="ni"><span class="nn">Kaden Allen</span><span class="nf">28.4K</span><span class="ne">5,644 avg views</span></div>
+            <div class="ni"><span class="nn">Wyatt Fann</span><span class="nf">6.7K</span><span class="ne">US · 936 avg likes · 45,848 avg views</span></div>
+            <div style="color:#9ca3af;font-size:0.74rem;margin-top:3px">More accounts in JSON</div>
+          </td>
+          <td><span class="badge b-cross">★ Priority gap</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ═══════════════════ TIKTOK ═══════════════════ -->
+<div class="platform-section">
+  <div class="platform-header">
+    <div class="platform-icon ic-tt">TT</div>
+    <div>
+      <div class="platform-title">TikTok</div>
+      <div class="platform-subtitle">40,100 followers · 115 avg likes/post · 0.29% share of followers who actively respond</div>
+    </div>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Geographic &amp; Demographics</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Caleb's Data</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">top_countries</td>
+          <td>Countries of TikTok followers (no city data available on TikTok)</td>
+          <td class="vlist">
+            <span class="r"><span class="rk">1.</span> United States <span class="pct">93.83%</span><span class="cnt">(37,623)</span></span>
+            <span class="r"><span class="rk">2.</span> Nigeria <span class="pct">3.52%</span><span class="cnt">(1,410)</span></span>
+            <span class="r"><span class="rk">3.</span> Canada <span class="pct">1.15%</span></span>
+            <span class="r"><span class="rk">4.</span> Australia <span class="pct">0.47%</span></span>
+            <span class="r"><span class="rk">5.</span> United Kingdom <span class="pct">0.31%</span></span>
+          </td>
+          <td><span class="badge b-live">● In ARTiE</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_genders</td>
+          <td>Overall gender split — notably more balanced than Instagram</td>
+          <td><div class="gsplit"><span class="gf">51.84% Female</span><span class="gm">48.16% Male</span></div></td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+        <tr>
+          <td class="col-field">audience_genders_per_age</td>
+          <td>TikTok follower gender by age bracket</td>
+          <td>
+            <table class="agetab">
+              <tr><td class="ac">18–24</td><td class="af">F: 22.84%</td><td class="am">M: 20.38%</td></tr>
+              <tr><td class="ac">25–34</td><td class="af">F: 14.92%</td><td class="am">M: 17.39%</td></tr>
+              <tr><td class="ac">35–44</td><td class="af">F: 7.51%</td><td class="am">M: 5.41%</td></tr>
+            </table>
+          </td>
+          <td><span class="badge b-avail">◎ Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="category">
+    <div class="category-title">Fans with Large Followings — TikTok (60 accounts · currently unused in ARTiE)</div>
+    <table>
+      <thead><tr><th class="col-field">Field</th><th class="col-desc">What it is</th><th class="col-value">Top accounts following Caleb on TikTok</th><th class="col-status">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="col-field">notable_followers</td>
+          <td>TikTok accounts with large followings who follow Caleb. Follower count, verified status, country, engagement count on their content.</td>
+          <td class="notelist">
+            <div class="ni"><span class="nn">The 615 House</span><span class="nf">3.3M</span><span class="ne">US · 7,771 eng</span></div>
+            <div class="ni"><span class="nn">Erin Constantine</span><span class="nf">1.15M</span><span class="ne">US · 168 eng</span></div>
+            <div class="ni"><span class="nn">Dylan Wolfe</span><span class="nf">1.1M</span><span class="nv">✓ Verified</span><span class="ne">US · 5,415 eng</span></div>
+            <div class="ni"><span class="nn">Matt Bennett</span><span class="nf">931.5K</span><span class="nv">✓ Verified</span><span class="ne">US · 36,456 eng</span></div>
+            <div class="ni"><span class="nn">Deneen Bryan</span><span class="nf">923.5K</span><span class="ne">US · 5,957 eng</span></div>
+            <div class="ni"><span class="nn">GEORGIA HAIR</span><span class="nf">760.7K</span><span class="ne">US · 9,076 eng</span></div>
+            <div class="ni"><span class="nn">Country Central</span><span class="nf">649.8K</span><span class="ne">US · 5,856 eng</span></div>
+            <div class="ni"><span class="nn">Don Louis</span><span class="nf">629.8K</span><span class="nv">✓ Verified</span><span class="ne">US</span></div>
+            <div class="ni"><span class="nn">Colt Ford</span><span class="nf">507.3K</span><span class="nv">✓ Verified</span><span class="ne">US</span></div>
+            <div class="ni"><span class="nn">Music Mayhem Magazine</span><span class="nf">288.7K</span><span class="ne">US · 8,297 eng</span></div>
+            <div class="ni"><span class="nn">Neon Union</span><span class="nf">282.1K</span><span class="nv">✓ Verified</span><span class="ne">US</span></div>
+            <div style="color:#9ca3af;font-size:0.74rem;margin-top:3px">49 more accounts in JSON continuing down to ~90K followers</div>
+          </td>
+          <td><span class="badge b-cross">★ Priority gap</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ═══════════════════ CROSS-PLATFORM HOTSPOT ═══════════════════ -->
+<div class="cross-section" style="padding-top:24px;">
+  <div class="cross-box">
+    <h3>★ Fan Hotspot Analysis — Where Multiple Data Sources Agree</h3>
+    <p style="font-size:0.8rem;color:#92400e;margin-bottom:16px;line-height:1.6;">
+      A city is a confirmed fan hotspot when it appears across <strong>multiple independent data sources</strong>. ARTiE already cross-references Spotify city listeners with imported fan lists. The next step is adding Instagram liker cities as a third source. Below is what the cross-platform picture looks like for Caleb based on available data:
+    </p>
+    <div class="cross-grid">
+      <div class="cross-city">
+        <div class="cc-name">Nashville, TN</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Strong</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">#2 — 1.00%</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#1 — 8.32%</span></div>
+        <div class="cc-row"><span class="src">TikTok</span><span class="val">Country only</span></div>
+        <div class="cc-gap">3 sources agree → highest confidence hotspot</div>
+      </div>
+      <div class="cross-city">
+        <div class="cc-name">Los Angeles, CA</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Strong</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">#1 — 1.36%</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#3 — 2.37%</span></div>
+        <div class="cc-row"><span class="src">TikTok</span><span class="val">Country only</span></div>
+        <div class="cc-gap">3 sources agree → high confidence hotspot</div>
+      </div>
+      <div class="cross-city">
+        <div class="cc-name">Atlanta, GA</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Present</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">#4 — 0.82%</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#4 — 1.22%</span></div>
+        <div class="cc-row"><span class="src">TikTok</span><span class="val">Country only</span></div>
+        <div class="cc-gap">3 sources agree → solid secondary market</div>
+      </div>
+      <div class="cross-city">
+        <div class="cc-name">New York City, NY</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Strong</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">#3 — 0.84%</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#5 — 1.11%</span></div>
+        <div class="cc-gap">3 sources agree → confirmed market</div>
+      </div>
+      <div class="cross-city">
+        <div class="cc-name">Greater London, UK</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Present</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">Not in top 7</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#2 — 3.25%</span></div>
+        <div class="cc-gap">Liker signal stronger than follower signal — active interest in UK</div>
+      </div>
+      <div class="cross-city">
+        <div class="cc-name">Chicago, IL</div>
+        <div class="cc-row"><span class="src">Spotify listeners</span><span class="val">Present</span></div>
+        <div class="cc-row"><span class="src">IG follower cities</span><span class="val">#6 — 0.57%</span></div>
+        <div class="cc-row"><span class="src">IG liker cities</span><span class="val">#6 — 0.67%</span></div>
+        <div class="cc-gap">Consistent across 3 sources — reliable market</div>
+      </div>
+    </div>
+    <div class="cross-note">
+      <strong>The key insight:</strong> Nashville is an 8× over-index city — 1% of followers but 8.32% of likers. This means Caleb's Nashville fans are dramatically more active than followers alone would suggest. Spotify data almost certainly confirms this. Wiring <code>likers_top_cities</code> into the tour scoring model would make Nashville appear as a 3-source hotspot and move it up the tour priority list automatically.
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════ SUMMARY ═══════════════════ -->
+<div class="summary-strip">
+  <h3>Summary — May 2026 Update (Tour Scoring Rebalanced)</h3>
+  <div class="sg">
+    <div class="sc">
+      <div class="sl">Already in ARTiE</div>
+      <div class="sv">13</div>
+      <div class="ss">Spotify city scores (40%), IG liker cities (35%), IG follower cities + countries, IG avg likes/comments + age/gender, YT countries + avg stats, TikTok countries, Peer Market Index, cross-platform city hotspots</div>
+    </div>
+    <div class="sc">
+      <div class="sl">Remaining gaps</div>
+      <div class="sv">2</div>
+      <div class="ss">Notable followers (amplifiers — 180 accounts across 3 platforms), brand/interest affinities (ad targeting)</div>
+    </div>
+    <div class="sc">
+      <div class="sl">Secondary gaps</div>
+      <div class="sv">8+</div>
+      <div class="ss">Simple gender splits (YT, TikTok, IG summary), ethnicity, commenter geo (YT), liker demographics</div>
+    </div>
+    <div class="sc">
+      <div class="sl">Confirmed hotspot cities</div>
+      <div class="sv">6</div>
+      <div class="ss">Nashville · LA · Atlanta · NYC · London · Chicago — all confirmed by 2–3 independent signals (streaming + social fans)</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+.next/
+node_modules/
+graphify-out/
+.env
+.env.local
+dist/
+coverage/
+supabase-data/

@@ -1,0 +1,6 @@
+.next
+node_modules
+graphify-out
+.git
+supabase-data
+npm-debug.log
