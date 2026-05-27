@@ -6,3 +6,4 @@ graphify-out/
 dist/
 coverage/
 supabase-data/
+volumes/db/data/
