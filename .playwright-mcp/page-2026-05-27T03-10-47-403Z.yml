@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - complementary [ref=e26]:
+      - generic [ref=e28]:
+        - generic [ref=e29]: AA
+        - generic [ref=e30]: Ask Artie
+      - generic [ref=e31]:
+        - button "New chat" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - paragraph [ref=e34]: Chats
+          - generic [ref=e35]: No chats yet
+      - group [ref=e37]:
+        - generic "OB onboarding-browser@example.test" [ref=e38] [cursor=pointer]:
+          - generic [ref=e39]: OB
+          - generic [ref=e40]: onboarding-browser@example.test
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - heading "Chat" [level=1] [ref=e45]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e48]: CL
+            - generic [ref=e49]: Caleb Lee Hutchinson
+          - combobox "Artist" [ref=e51] [cursor=pointer]:
+            - option "Caleb Lee Hutchinson" [selected]
+            - option "+ Add artist"
+      - generic [ref=e53]:
+        - heading "What should your artist team do next?" [level=2] [ref=e54]
+        - paragraph [ref=e55]: Ask about release strategy, tour priorities, fan activation, content, merch, or the metrics behind your next move.
+        - generic "Starter questions" [ref=e56]:
+          - button "What should shape Caleb's next single rollout?" [ref=e57] [cursor=pointer]
+          - button "Which cities should we prioritize first?" [ref=e58] [cursor=pointer]
+          - button "What content angles fit the current audience signals?" [ref=e59] [cursor=pointer]
+          - button "What merch or fan activation should we test next?" [ref=e60] [cursor=pointer]
+      - generic [ref=e62]:
+        - textbox "Ask Artie about your next artist move..." [ref=e63]
+        - generic [ref=e64]:
+          - generic [ref=e65]: Using Caleb Lee Hutchinson data
+          - button "Send" [disabled] [ref=e66]
+  - alert [ref=e21]

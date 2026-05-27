@@ -2,9 +2,17 @@ create table if not exists public.chat_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   title text not null default 'New chat',
+  artist_id text,
+  artist_name text,
   opencode_session_id text not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.chat_sessions
+  add column if not exists artist_id text;
+
+alter table public.chat_sessions
+  add column if not exists artist_name text;
 
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
@@ -36,6 +44,12 @@ create policy "Users can insert their chat sessions"
   to authenticated
   with check (user_id = auth.uid());
 
+drop policy if exists "Users can delete their chat sessions" on public.chat_sessions;
+create policy "Users can delete their chat sessions"
+  on public.chat_sessions for delete
+  to authenticated
+  using (user_id = auth.uid());
+
 drop policy if exists "Users can read their chat messages" on public.chat_messages;
 create policy "Users can read their chat messages"
   on public.chat_messages for select
@@ -49,5 +63,5 @@ create policy "Users can insert their chat messages"
   with check (user_id = auth.uid());
 
 grant usage on schema public to anon, authenticated;
-grant select, insert on public.chat_sessions to authenticated;
+grant select, insert, delete on public.chat_sessions to authenticated;
 grant select, insert on public.chat_messages to authenticated;

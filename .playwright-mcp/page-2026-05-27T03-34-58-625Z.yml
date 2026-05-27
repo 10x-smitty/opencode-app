@@ -1,0 +1,43 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: AA
+        - generic [ref=e7]: Ask Artie
+      - generic [ref=e8]:
+        - button "New chat" [ref=e9] [cursor=pointer]
+        - generic [ref=e10]:
+          - paragraph [ref=e11]: Chats
+          - generic [ref=e58]: No chats yet
+      - group [ref=e14]:
+        - generic "OB onboarding-browser@example.test" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: OB
+          - generic [ref=e17]: onboarding-browser@example.test
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - heading "Chat" [level=1] [ref=e22]
+        - group [ref=e23]:
+          - generic "Artist" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]: CL
+            - generic [ref=e26]: Caleb Lee Hutchinson
+          - generic [ref=e44]:
+            - button "CL Caleb Lee Hutchinson Default artist" [ref=e46] [cursor=pointer]:
+              - generic [ref=e47]: CL
+              - generic [ref=e48]:
+                - generic [ref=e49]: Caleb Lee Hutchinson
+                - generic [ref=e50]: Default artist
+            - button "+ Add artist" [ref=e51] [cursor=pointer]
+      - generic [ref=e29]:
+        - heading "What should your artist team do next?" [level=2] [ref=e30]
+        - paragraph [ref=e31]: Ask about release strategy, tour priorities, fan activation, content, merch, or the metrics behind your next move.
+        - generic "Starter questions" [ref=e32]:
+          - button "What should shape Caleb's next single rollout?" [ref=e33] [cursor=pointer]
+          - button "Which cities should we prioritize first?" [ref=e34] [cursor=pointer]
+          - button "What content angles fit the current audience signals?" [ref=e35] [cursor=pointer]
+          - button "What merch or fan activation should we test next?" [ref=e36] [cursor=pointer]
+      - generic [ref=e38]:
+        - textbox "Ask Artie about your next artist move..." [ref=e39]
+        - generic [ref=e40]:
+          - generic [ref=e41]: Using Caleb Lee Hutchinson data
+          - button "Send" [disabled] [ref=e42]
+  - alert [ref=e43]

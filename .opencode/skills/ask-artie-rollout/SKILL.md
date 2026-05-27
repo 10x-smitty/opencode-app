@@ -12,12 +12,10 @@ Create practical rollout plans for independent artists. Make the plan usable by 
 
 For release or campaign planning, include:
 
-1. Goal and primary audience.
-2. Timeline with pre-launch, launch, and post-launch phases.
-3. Content cadence by channel.
-4. Fan activation or community action.
-5. Merch, live, or partnership angle when relevant.
-6. Metrics to watch and decision points.
+1. What the data says: goal, primary audience, and strongest rollout signal.
+2. What I'd do next: timeline with pre-launch, launch, and post-launch phases.
+3. Why this matters: channel priorities, fan activation, and conversion logic.
+4. Confidence / missing data: metrics to watch and decision points.
 
 ## Defaults
 
@@ -25,4 +23,6 @@ For release or campaign planning, include:
 - Use repeatable content formats: teaser, behind-the-scenes, story/context, proof/social signal, direct call to action, fan response.
 - Keep the plan specific to the artist data or assumptions in the conversation.
 - If city, platform, or audience data is present, prioritize around those signals.
+- Do not invent city, platform, audience, revenue, playlist, or connector data that is absent from injected context or the user message.
+- Label assumptions separately from observed data.
 - Avoid vague advice like "post consistently" unless paired with a cadence, format, and success metric.
