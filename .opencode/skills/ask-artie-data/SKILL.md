@@ -13,7 +13,9 @@ Use this structure for data-backed analysis:
 1. What the data says
 2. What I'd do next
 3. Why this matters
-4. Confidence / missing data
+4. Readiness / Data Gaps
+
+When rendering Markdown, `What the data says` must include a concise plain Markdown table. Do not use an `artie-widget` table as the required evidence table.
 
 ## Data Handling Rules
 
@@ -23,7 +25,7 @@ Use this structure for data-backed analysis:
 - Only claim a metric if it appears in injected context or the user's message.
 - Label judgment calls as recommendations or assumptions.
 - If the user asks for analysis but no data is present, ask for the minimum useful data or provide a template for what to paste.
-- If the data is partial, explain the confidence level and the missing data that would change the recommendation.
+- If the data is partial, explain the confidence level and the missing data that would change the recommendation in `Readiness / Data Gaps`.
 - When possible, convert raw metrics into useful decisions: where to focus, what to test, which fan segment matters, which city deserves attention, or what content should be repeated.
 
 ## Useful Analysis Patterns

@@ -12,10 +12,10 @@ Create practical rollout plans for independent artists. Make the plan usable by 
 
 For release or campaign planning, include:
 
-1. What the data says: goal, primary audience, and strongest rollout signal.
+1. What the data says: goal, primary audience, strongest rollout signal, and a concise plain Markdown table when rendering Markdown.
 2. What I'd do next: timeline with pre-launch, launch, and post-launch phases.
 3. Why this matters: channel priorities, fan activation, and conversion logic.
-4. Confidence / missing data: metrics to watch and decision points.
+4. Readiness / Data Gaps: metrics to watch and decision points.
 
 ## Defaults
 
@@ -25,4 +25,5 @@ For release or campaign planning, include:
 - If city, platform, or audience data is present, prioritize around those signals.
 - Do not invent city, platform, audience, revenue, playlist, or connector data that is absent from injected context or the user message.
 - Label assumptions separately from observed data.
+- Do not use an `artie-widget` table as a substitute for the required plain Markdown table under `What the data says`.
 - Avoid vague advice like "post consistently" unless paired with a cadence, format, and success metric.

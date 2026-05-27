@@ -770,10 +770,11 @@ button.secondary {
 }
 
 .empty-state h2 {
-  max-width: 700px;
-  font-size: clamp(34px, 5vw, 62px);
+  max-width: 100%;
+  font-size: clamp(24px, 2.6vw, 34px);
   font-weight: 720;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .empty-state p {
@@ -787,19 +788,19 @@ button.secondary {
 .starter-questions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  width: min(680px, 100%);
-  margin-top: 12px;
+  gap: 12px;
+  width: min(760px, 100%);
+  margin-top: 16px;
 }
 
 .starter-questions button {
-  min-height: 46px;
+  min-height: 64px;
   justify-content: flex-start;
-  padding: 10px 12px;
+  padding: 15px 16px;
   border-color: var(--border);
   background: var(--surface);
   color: var(--muted-strong);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.35;
   text-align: left;
   white-space: normal;
@@ -1498,6 +1499,11 @@ button.secondary {
 
   .starter-questions {
     grid-template-columns: 1fr;
+  }
+
+  .empty-state h2 {
+    font-size: 24px;
+    white-space: normal;
   }
 
   .composer-footer {

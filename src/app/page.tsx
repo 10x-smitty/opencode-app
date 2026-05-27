@@ -30,10 +30,10 @@ const INITIAL_ARTISTS: ArtistOption[] = [
 ];
 
 const STARTER_QUESTIONS = [
-  "What should shape Caleb's next single rollout?",
-  "Which cities should we prioritize first?",
-  "What content angles fit the current audience signals?",
-  "What merch or fan activation should we test next?",
+  "Where should I tour?",
+  "What content works best?",
+  "Who are my influential fans?",
+  "Playlist activity",
 ];
 
 function getInitials(value?: string | null) {
