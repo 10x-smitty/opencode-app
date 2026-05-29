@@ -203,7 +203,7 @@ button.secondary {
   grid-template-rows: 57px minmax(0, 1fr) auto;
   min-width: 0;
   height: 100vh;
-  border-right: 1px solid var(--border-soft);
+  border-right: none;
 }
 
 .sidebar-header {
@@ -329,7 +329,6 @@ button.secondary {
 .sidebar-footer {
   display: grid;
   padding: 12px;
-  border-top: 1px solid var(--border-soft);
 }
 
 .user-menu {
@@ -400,7 +399,8 @@ button.secondary {
   min-width: 0;
   height: 100vh;
   overflow: hidden;
-  border-top-left-radius: 12px;
+  border: 1px solid #4f4f4f;
+  border-radius: 16px 0 0 16px;
   background: var(--background);
 }
 
@@ -1470,7 +1470,7 @@ button.secondary {
 
   .chat-panel {
     height: calc(100vh - 174px);
-    border-top-left-radius: 0;
+    border-radius: 0;
   }
 
   .chat-header {

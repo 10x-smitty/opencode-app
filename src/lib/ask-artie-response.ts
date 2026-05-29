@@ -11,6 +11,11 @@ type Bullet = {
   text: string;
 };
 
+export type WhyTable = {
+  columns: string[];
+  rows: string[][];
+};
+
 export type AskArtieResponse = {
   theAnswer: string;
   why: Bullet[];
@@ -19,6 +24,7 @@ export type AskArtieResponse = {
   methodology?: string;
   widgets?: ResponseWidget[];
   suggestions?: string[];
+  whyTable?: WhyTable;
 };
 
 const WIDGET_PLACEMENTS = new Set<WidgetPlacement>([
@@ -47,11 +53,17 @@ export const ASK_ARTIE_RESPONSE_JSON_SCHEMA = `{
   "methodology": "Optional one-sentence note on how the recommendation was measured. Renders as a small footer.",
   "widgets": [
     {
-      "type": "map | barChart | table",
-      "placement": "answer | why | recommend | expect",
-      "...": "Widget payload using the app-supported artie-widget schema. The placement field controls which section the widget renders inside."
+      "type": "map",
+      "placement": "why",
+      "points": "Only used for WHERE/location/touring questions. Exactly one map widget, placement must be 'why'. No other widget types are allowed."
     }
   ],
+  "whyTable": {
+    "columns": ["Column A", "Column B"],
+    "rows": [
+      ["Cell", "Cell"]
+    ]
+  },
   "suggestions": [
     "Short follow-up question the user might ask next (under 8 words).",
     "Second follow-up question, distinct from the first.",
@@ -129,6 +141,7 @@ export function parseAskArtieResponse(raw: string): AskArtieResponse {
 
   const methodology = asString(parsed.methodology);
   const suggestions = normalizeStringArray(parsed.suggestions).slice(0, 4);
+  const whyTable = normalizeWhyTable(parsed.whyTable);
 
   return {
     theAnswer,
@@ -138,7 +151,26 @@ export function parseAskArtieResponse(raw: string): AskArtieResponse {
     methodology: methodology || undefined,
     widgets: normalizeWidgets(parsed.widgets),
     suggestions: suggestions.length ? suggestions : undefined,
+    whyTable,
   };
+}
+
+function normalizeWhyTable(value: unknown): WhyTable | undefined {
+  if (!isRecord(value)) return undefined;
+  if (!Array.isArray(value.columns) || !Array.isArray(value.rows)) return undefined;
+
+  const columns = value.columns.map(asString).filter(Boolean);
+  if (!columns.length) return undefined;
+
+  const rows = value.rows
+    .filter(Array.isArray)
+    .map((row) =>
+      columns.map((_, index) => asString((row as unknown[])[index]) || "—"),
+    );
+
+  if (!rows.length) return undefined;
+
+  return { columns, rows };
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -163,6 +195,15 @@ export function renderAskArtieResponse(response: AskArtieResponse) {
       "```",
     ]);
 
+  const renderWhyTable = () => {
+    if (!response.whyTable) return [] as string[];
+    const { columns, rows } = response.whyTable;
+    const header = `| ${columns.map(escapeMarkdownCell).join(" | ")} |`;
+    const divider = `| ${columns.map(() => "---").join(" | ")} |`;
+    const body = rows.map((row) => `| ${row.map(escapeMarkdownCell).join(" | ")} |`);
+    return ["", header, divider, ...body];
+  };
+
   const lines: string[] = [
     "## 📍 The Answer",
     "",
@@ -173,6 +214,7 @@ export function renderAskArtieResponse(response: AskArtieResponse) {
     "",
     renderBullets(response.why),
     ...renderWidgets("why"),
+    ...renderWhyTable(),
     "",
     "## ✅ What I Recommend",
     "",
@@ -194,6 +236,10 @@ export function renderAskArtieResponse(response: AskArtieResponse) {
   }
 
   return lines.join("\n").trim();
+}
+
+function escapeMarkdownCell(value: string) {
+  return value.replace(/\|/g, "\\|").replace(/\n+/g, " ").trim() || "—";
 }
 
 function extractJson(raw: string) {

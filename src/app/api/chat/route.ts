@@ -4,6 +4,7 @@ import {
   ASK_ARTIE_RESPONSE_JSON_SCHEMA,
   parseAskArtieResponse,
   renderAskArtieResponse,
+  type AskArtieResponse,
 } from "@/lib/ask-artie-response";
 import { getChartmetricArtistContext } from "@/lib/chartmetric";
 import { getPool } from "@/lib/db";
@@ -105,6 +106,21 @@ function isLocationPrompt(content: string) {
 
 function buildAskArtiePrompt(content: string, chartmetricContext: string) {
   const wantsLocationAnswer = isLocationPrompt(content);
+  const evidenceRules = wantsLocationAnswer
+    ? [
+        "EVIDENCE FORMAT — this is a WHERE/location question:",
+        "- Include EXACTLY ONE `map` widget in `widgets` with `placement: \"why\"`. No other widgets, no `whyTable`.",
+        "- Each map point must have name, latitude, longitude, and a value or label.",
+        "- Limit to the 3-8 highest-priority markets.",
+        "- If you genuinely cannot supply coordinates, omit the map AND omit `whyTable`; just describe the locations in the `why` bullets.",
+      ]
+    : [
+        "EVIDENCE FORMAT — this is NOT a location question:",
+        "- Do NOT include any widgets. Leave `widgets` empty or omit it entirely.",
+        "- If a comparison table would help (e.g. ranked superfans, top songs), populate `whyTable` with `columns` and `rows`. The app renders it as a Markdown table inside the Why section.",
+        "- `whyTable` is optional — omit it entirely if a table doesn't add value.",
+        "- Never include a `table`, `map`, or `barChart` widget for non-location questions.",
+      ];
 
   return [
     "You are Ask Artie. Answer the user's question using the artist data context below as the primary source of truth.",
@@ -124,24 +140,8 @@ function buildAskArtiePrompt(content: string, chartmetricContext: string) {
     "- If confidence is low or data is missing, surface that in `whatToExpect` or in the optional `methodology` footer.",
     "- `suggestions` is an array of 2-4 short follow-up questions the user would plausibly ask next, given this answer. Each suggestion must be under 8 words, end with `?`, and reference something concrete from this answer (a city, metric, market, etc.). Examples: 'How big is the Santiago audience?', 'What venue size in Buenos Aires?'. Do not repeat the user's original question.",
     "",
-    "Optional data widgets:",
-    "- Put optional widgets in the top-level `widgets` array, not as Markdown fences.",
-    "- Each widget MUST include a `placement` field set to one of: `answer`, `why`, `recommend`, `expect`. The widget renders inside that section.",
-    "- Supported widget types are `table`, `map`, and `barChart` using the app-supported artie-widget payload shape.",
-    "- Whenever the answer references two or more cities, countries, or markets and you can provide latitude/longitude, include a `map` widget with `placement: \"why\"` so the evidence sits inside the Why section.",
-    "- If coordinates aren't available, include a `table` widget with `placement: \"why\"` instead and say coordinates were unavailable.",
-    "- For maps, only include points when latitude and longitude are available in context or are common city coordinates you are confident about. Otherwise use a table.",
-    "- For map widgets, include useful `value` and `label` fields because the UI shows clickable marker popups and a location list.",
-    "- Keep map widgets to the highest-priority 3-8 markets so the widget stays readable. Each point must include name, latitude, longitude, and a value or label that explains the observed signal.",
-    "- For table widgets, keep rows concise and use stable column keys because the UI provides filtering and sorting.",
-    wantsLocationAnswer
-      ? [
-          "",
-          "Location-response requirement:",
-          "- This user is explicitly asking about locations, markets, routing, geography, touring, or audience geography.",
-          "- A `map` widget with `placement: \"why\"` is required (or a `table` widget with `placement: \"why\"` if coordinates are unavailable).",
-        ].join("\n")
-      : "",
+    ...evidenceRules,
+    "- IMPORTANT: pick ONE evidence form per response. Never combine widgets with `whyTable`, and never include more than one widget. The server strips violations.",
     "",
     "<artist_data_context>",
     chartmetricContext,
@@ -151,6 +151,25 @@ function buildAskArtiePrompt(content: string, chartmetricContext: string) {
     content,
     "</user_question>",
   ].join("\n");
+}
+
+function enforceResponsePolicy(
+  response: AskArtieResponse,
+  wantsLocationAnswer: boolean,
+): AskArtieResponse {
+  if (wantsLocationAnswer) {
+    const firstMap = (response.widgets ?? []).find((widget) => widget.type === "map");
+    return {
+      ...response,
+      widgets: firstMap ? [{ ...firstMap, placement: "why" }] : [],
+      whyTable: undefined,
+    };
+  }
+
+  return {
+    ...response,
+    widgets: [],
+  };
 }
 
 function buildRepairPrompt(rawReply: string, validationError: unknown) {
@@ -206,16 +225,25 @@ function renderFallbackReply(validationError: unknown) {
   });
 }
 
-async function getValidatedReply(opencodeSessionId: string, prompt: string) {
+async function getValidatedReply(
+  opencodeSessionId: string,
+  prompt: string,
+  wantsLocationAnswer: boolean,
+) {
   const rawReply = await promptOpencode(opencodeSessionId, prompt);
 
+  const renderEnforced = (raw: string) =>
+    renderAskArtieResponse(
+      enforceResponsePolicy(parseAskArtieResponse(raw), wantsLocationAnswer),
+    );
+
   try {
-    return renderAskArtieResponse(parseAskArtieResponse(rawReply));
+    return renderEnforced(rawReply);
   } catch (error) {
     const repairPrompt = buildRepairPrompt(rawReply, error);
     const repairedReply = await promptOpencode(opencodeSessionId, repairPrompt);
     try {
-      return renderAskArtieResponse(parseAskArtieResponse(repairedReply));
+      return renderEnforced(repairedReply);
     } catch (repairError) {
       console.warn("Ask Artie response validation failed after repair", {
         initialError: error instanceof Error ? error.message : String(error),
@@ -266,10 +294,11 @@ export async function POST(request: Request) {
 
     const chartmetricContext = await getChartmetricArtistContext(body.artistId, body.artistName);
     const prompt = buildAskArtiePrompt(content, chartmetricContext);
+    const wantsLocationAnswer = isLocationPrompt(content);
 
     let reply: string;
     try {
-      reply = await getValidatedReply(session.opencode_session_id, prompt);
+      reply = await getValidatedReply(session.opencode_session_id, prompt, wantsLocationAnswer);
     } catch (error) {
       if (!isRetryableOpencodeError(error)) throw error;
 
@@ -279,7 +308,7 @@ export async function POST(request: Request) {
       });
 
       const refreshed = await refreshOpencodeSession(session.id, content.slice(0, 72));
-      reply = await getValidatedReply(refreshed.opencode_session_id, prompt);
+      reply = await getValidatedReply(refreshed.opencode_session_id, prompt, wantsLocationAnswer);
     }
 
     const assistantMessage = await pool.query(
