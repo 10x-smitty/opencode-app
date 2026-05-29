@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { consumeArtistSearchResult } from "@/lib/artist-search-cache";
-import { getChartmetricConfigStatus } from "@/lib/chartmetric";
 import { getPool } from "@/lib/db";
 
 type AddArtistRequest = {
@@ -13,15 +12,14 @@ function rowToArtist(row: {
   name: string;
   image_url?: string | null;
   genres?: string[] | null;
-  is_default?: boolean;
+  social_handle?: string | null;
 }) {
   return {
     id: row.chartmetric_artist_id,
     name: row.name,
-    dataLabel: "Live Chartmetric",
     imageUrl: row.image_url ?? null,
     genres: row.genres ?? [],
-    isDefault: row.is_default ?? false,
+    socialHandle: row.social_handle ?? null,
   };
 }
 
@@ -30,33 +28,14 @@ export async function GET(request: Request) {
     const user = await requireUser(request);
     const pool = getPool();
     const result = await pool.query(
-      `select chartmetric_artist_id, name, image_url, genres
+      `select chartmetric_artist_id, name, image_url, genres, social_handle
        from user_artists
        where user_id = $1
        order by created_at asc`,
       [user.id],
     );
 
-    const artists = result.rows.map(rowToArtist);
-    const status = getChartmetricConfigStatus();
-
-    if (
-      status.configured &&
-      status.artistId &&
-      status.artistName &&
-      !artists.some((artist) => artist.id === status.artistId)
-    ) {
-      artists.unshift({
-        id: status.artistId,
-        name: status.artistName,
-        dataLabel: "Live Chartmetric",
-        imageUrl: null,
-        genres: [],
-        isDefault: true,
-      });
-    }
-
-    return NextResponse.json({ artists });
+    return NextResponse.json({ artists: result.rows.map(rowToArtist) });
   } catch (error) {
     if (error instanceof Response) return error;
     console.error(error);
@@ -88,15 +67,16 @@ export async function POST(request: Request) {
     const pool = getPool();
     const result = await pool.query(
       `insert into user_artists
-        (user_id, chartmetric_artist_id, name, image_url, genres, monthly_listeners, career_stage)
-       values ($1, $2, $3, $4, $5, $6, $7)
+        (user_id, chartmetric_artist_id, name, image_url, genres, monthly_listeners, career_stage, social_handle)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (user_id, chartmetric_artist_id) do update
        set name = excluded.name,
            image_url = excluded.image_url,
            genres = excluded.genres,
            monthly_listeners = excluded.monthly_listeners,
-           career_stage = excluded.career_stage
-       returning chartmetric_artist_id, name, image_url, genres`,
+           career_stage = excluded.career_stage,
+           social_handle = excluded.social_handle
+       returning chartmetric_artist_id, name, image_url, genres, social_handle`,
       [
         user.id,
         artist.id,
@@ -105,6 +85,7 @@ export async function POST(request: Request) {
         artist.genres,
         artist.monthlyListeners,
         artist.careerStage,
+        artist.socialHandle ?? null,
       ],
     );
 

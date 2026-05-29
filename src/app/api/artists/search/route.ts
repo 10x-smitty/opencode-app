@@ -21,6 +21,7 @@ export async function GET(request: Request) {
       genres: artist.genres,
       monthlyListeners: artist.monthlyListeners,
       careerStage: artist.careerStage,
+      socialHandle: artist.socialHandle,
     }));
 
     return NextResponse.json({ results });

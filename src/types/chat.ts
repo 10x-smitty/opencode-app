@@ -19,10 +19,9 @@ export type ChatSession = {
 export type ArtistOption = {
   id: string;
   name: string;
-  dataLabel: string;
   imageUrl?: string | null;
   genres?: string[];
-  isDefault?: boolean;
+  socialHandle?: string | null;
 };
 
 export type ArtistSearchResult = {
@@ -32,6 +31,7 @@ export type ArtistSearchResult = {
   genres?: string[];
   monthlyListeners?: number | null;
   careerStage?: string | null;
+  socialHandle?: string | null;
 };
 
 export type ModelSelection = {

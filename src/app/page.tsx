@@ -22,13 +22,6 @@ const supabaseConfig = {
 };
 
 const ADD_ARTIST_VALUE = "__add_artist__";
-const INITIAL_ARTISTS: ArtistOption[] = [
-  {
-    id: "1029268",
-    name: "Caleb Lee Hutchinson",
-    dataLabel: "Live Chartmetric",
-  },
-];
 
 const STARTER_QUESTIONS = [
   "Where should I tour?",
@@ -86,8 +79,8 @@ export default function Home() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [artists, setArtists] = useState<ArtistOption[]>(INITIAL_ARTISTS);
-  const [selectedArtistId, setSelectedArtistId] = useState(INITIAL_ARTISTS[0].id);
+  const [artists, setArtists] = useState<ArtistOption[]>([]);
+  const [selectedArtistId, setSelectedArtistId] = useState("");
   const [isArtistOnboardingOpen, setIsArtistOnboardingOpen] = useState(false);
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
   const [artistSearchResults, setArtistSearchResults] = useState<ArtistSearchResult[]>([]);
@@ -167,11 +160,12 @@ export default function Home() {
         return response.json();
       })
       .then((data: { artists: ArtistOption[] }) => {
-        const nextArtists = data.artists.length ? data.artists : INITIAL_ARTISTS;
+        const nextArtists = data.artists;
         setArtists(nextArtists);
-        setSelectedArtistId((current) =>
-          nextArtists.some((artist) => artist.id === current) ? current : nextArtists[0].id,
-        );
+        setSelectedArtistId((current) => {
+          if (nextArtists.some((artist) => artist.id === current)) return current;
+          return nextArtists[0]?.id ?? "";
+        });
       })
       .catch((error: Error) => setStatus(error.message));
   }, [authHeaders]);
@@ -378,7 +372,7 @@ export default function Home() {
   }
 
   async function deleteArtist(artist: ArtistOption) {
-    if (!authHeaders || artist.isDefault || deletingArtistId) return;
+    if (!authHeaders || deletingArtistId) return;
 
     setDeletingArtistId(artist.id);
     setStatus("");
@@ -394,9 +388,9 @@ export default function Home() {
       setArtists((current) => {
         const next = current.filter((item) => item.id !== artist.id);
         if (selectedArtistId === artist.id) {
-          setSelectedArtistId(next[0]?.id ?? INITIAL_ARTISTS[0].id);
+          setSelectedArtistId(next[0]?.id ?? "");
         }
-        return next.length ? next : INITIAL_ARTISTS;
+        return next;
       });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not delete artist");
@@ -411,7 +405,7 @@ export default function Home() {
 
     const query = artistSearchQuery.trim();
     if (query.length < 2) {
-      setArtistSearchStatus("Type at least two characters to search Chartmetric.");
+      setArtistSearchStatus("Type at least two characters to search.");
       setArtistSearchResults([]);
       return;
     }
@@ -430,7 +424,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error ?? "Artist search failed");
 
       setArtistSearchResults(data.results ?? []);
-      setArtistSearchStatus(data.results?.length ? "" : "No Chartmetric artists matched that search.");
+      setArtistSearchStatus(data.results?.length ? "" : "No artists matched that search.");
     } catch (error) {
       setArtistSearchStatus(error instanceof Error ? error.message : "Artist search failed");
     } finally {
@@ -615,51 +609,6 @@ export default function Home() {
             <h1>Chat</h1>
             {activeChatSession ? <p className="chat-subtitle">{activeChatSession.title}</p> : null}
           </div>
-          <details className="artist-menu">
-            <summary aria-label="Artist">
-              <span className="avatar-badge">{getInitials(selectedArtist?.name)}</span>
-              <span>{selectedArtist?.name ?? "Select artist"}</span>
-              <span className="menu-caret" />
-            </summary>
-            <div className="artist-menu-popover">
-              {artists.map((artist) => (
-                <div
-                  key={artist.id}
-                  className={`artist-menu-row ${artist.id === selectedArtistId ? "active" : ""}`}
-                >
-                  <button
-                    className="artist-menu-select"
-                    type="button"
-                    onClick={() => selectArtist(artist.id)}
-                  >
-                    <span className="avatar-badge">{getInitials(artist.name)}</span>
-                    <span className="artist-menu-copy">
-                      <span>{artist.name}</span>
-                      <span>{artist.isDefault ? "Default artist" : artist.dataLabel}</span>
-                    </span>
-                  </button>
-                  {artist.isDefault ? null : (
-                    <button
-                      className="artist-menu-delete"
-                      type="button"
-                      aria-label={`Delete ${artist.name}`}
-                      disabled={deletingArtistId === artist.id}
-                      onClick={() => deleteArtist(artist)}
-                    >
-                      x
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                className="artist-menu-add"
-                type="button"
-                onClick={() => selectArtist(ADD_ARTIST_VALUE)}
-              >
-                + Add artist
-              </button>
-            </div>
-          </details>
         </header>
 
         {isArtistOnboardingOpen ? (
@@ -668,7 +617,7 @@ export default function Home() {
               <div className="artist-onboarding-header">
                 <div>
                   <p className="eyebrow">Artist onboarding</p>
-                  <h2>Add an artist from Chartmetric</h2>
+                  <h2>Add artist to get started</h2>
                 </div>
                 <button
                   type="button"
@@ -713,7 +662,7 @@ export default function Home() {
                           result.genres?.slice(0, 2).join(", "),
                         ]
                           .filter(Boolean)
-                          .join(" · ") || "Chartmetric artist"}
+                          .join(" · ") || "Artist"}
                       </span>
                     </span>
                     <span className="artist-result-action">
@@ -786,10 +735,63 @@ export default function Home() {
               rows={3}
             />
             <div className="composer-footer">
-              <span className="composer-context">
-                Using {selectedArtist?.name ?? "selected artist"} data
-              </span>
-              <button type="submit" disabled={isSending || !draft.trim()}>
+              {artists.length === 0 ? (
+                <button
+                  type="button"
+                  className="artist-menu-add artist-menu-add--inline"
+                  onClick={() => selectArtist(ADD_ARTIST_VALUE)}
+                >
+                  + Add artist
+                </button>
+              ) : (
+                <details className="artist-menu artist-menu--up artist-menu--inline">
+                  <summary aria-label="Artist">
+                    <span className="avatar-badge">{getInitials(selectedArtist?.name)}</span>
+                    <span>{selectedArtist?.name ?? "Select artist"}</span>
+                    <span className="menu-caret" />
+                  </summary>
+                  <div className="artist-menu-popover">
+                    {artists.map((artist) => (
+                      <div
+                        key={artist.id}
+                        className={`artist-menu-row ${artist.id === selectedArtistId ? "active" : ""}`}
+                      >
+                        <button
+                          className="artist-menu-select"
+                          type="button"
+                          onClick={() => selectArtist(artist.id)}
+                        >
+                          <span className="avatar-badge">{getInitials(artist.name)}</span>
+                          <span className="artist-menu-copy">
+                            <span>{artist.name}</span>
+                            {artist.socialHandle ? <span>@{artist.socialHandle}</span> : null}
+                          </span>
+                        </button>
+                        <button
+                          className="artist-menu-delete"
+                          type="button"
+                          aria-label={`Delete ${artist.name}`}
+                          disabled={deletingArtistId === artist.id}
+                          onClick={() => deleteArtist(artist)}
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      className="artist-menu-add"
+                      type="button"
+                      onClick={() => selectArtist(ADD_ARTIST_VALUE)}
+                    >
+                      + Add artist
+                    </button>
+                  </div>
+                </details>
+              )}
+              <button
+                type="submit"
+                disabled={isSending || !draft.trim() || !selectedArtist}
+              >
                 {isSending ? "Sending" : "Send"}
               </button>
             </div>

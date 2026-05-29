@@ -29,6 +29,7 @@ export type ChartmetricArtistSearchResult = {
   genres: string[];
   monthlyListeners?: number | null;
   careerStage?: string | null;
+  socialHandle?: string | null;
 };
 
 const CALEB_ARTIST_ID = "caleb-lee-hutchinson";
@@ -485,9 +486,70 @@ export async function searchChartmetricArtists(query: string, limit = 10) {
         genres: extractGenreNames(artist.genres),
         monthlyListeners,
         careerStage: compactValue(artist.career_stage) || null,
+        socialHandle: extractSocialHandle(artist),
       },
     ];
   });
+}
+
+function normalizeSocialHandle(value: string) {
+  const trimmed = value.replace(/^@+/, "").trim().replace(/\/+$/, "");
+  return trimmed || null;
+}
+
+function parseHandleFromUrl(url: string) {
+  const match = url.match(/(?:instagram|tiktok|twitter|x)\.com\/@?([^\s/?#]+)/i);
+  if (!match) return null;
+  return normalizeSocialHandle(match[1]);
+}
+
+function extractSocialHandle(artist: Record<string, unknown>): string | null {
+  const usernameKeys = [
+    "instagram_username",
+    "ig_username",
+    "tiktok_username",
+    "tt_username",
+    "twitter_username",
+    "x_username",
+  ];
+  for (const key of usernameKeys) {
+    const raw = compactValue(artist[key]);
+    if (raw) {
+      const handle = normalizeSocialHandle(raw);
+      if (handle) return handle;
+    }
+  }
+
+  const urlKeys = ["instagram_url", "ig_url", "tiktok_url", "tt_url", "twitter_url", "x_url"];
+  for (const key of urlKeys) {
+    const raw = compactValue(artist[key]);
+    if (!raw) continue;
+    const handle = parseHandleFromUrl(raw);
+    if (handle) return handle;
+  }
+
+  if (Array.isArray(artist.domains)) {
+    for (const entry of artist.domains) {
+      if (!entry || typeof entry !== "object") continue;
+      const domain = entry as Record<string, unknown>;
+      const platform = String(domain.domain ?? domain.platform ?? "").toLowerCase();
+      if (!["instagram", "tiktok", "twitter", "x"].includes(platform)) continue;
+
+      const direct = compactValue(domain.handle ?? domain.username ?? domain.name);
+      if (direct) {
+        const handle = normalizeSocialHandle(direct);
+        if (handle) return handle;
+      }
+
+      const urlValue = compactValue(domain.url);
+      if (urlValue) {
+        const handle = parseHandleFromUrl(urlValue);
+        if (handle) return handle;
+      }
+    }
+  }
+
+  return null;
 }
 
 function stripHtml(html: string) {

@@ -221,7 +221,7 @@ textarea:focus {
 }
 
 .auth-actions button,
-.composer button {
+.composer button[type="submit"] {
   min-height: 40px;
   padding: 0 14px;
   background: var(--app-accent);
@@ -535,6 +535,33 @@ button.secondary {
   border-radius: 8px;
   background: #1b1b1b;
   box-shadow: var(--shadow);
+}
+
+.artist-menu--up .artist-menu-popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+/* Inline variant: lives inside the composer footer, so it should feel like a
+   soft control rather than a bordered chip. */
+.artist-menu--inline summary {
+  min-height: 28px;
+  padding: 3px 8px 3px 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--app-muted);
+}
+
+.artist-menu--inline summary:hover,
+.artist-menu--inline[open] summary {
+  border-color: var(--app-border);
+  background: var(--app-sidebar-hover);
+  color: var(--muted-strong);
+}
+
+.artist-menu--inline .artist-menu-popover {
+  right: auto;
+  left: 0;
 }
 
 .artist-menu-row {
@@ -1473,7 +1500,7 @@ button.secondary {
   white-space: nowrap;
 }
 
-.composer button {
+.composer button[type="submit"] {
   min-width: 78px;
 }
 
