@@ -1,10 +1,14 @@
 type WidgetPlacement = "answer" | "why" | "recommend" | "expect";
 
+export type MapKind = "markets" | "venues" | "routing" | "clusters";
+
 type ResponseWidget = {
   type: "table" | "map" | "barChart";
   placement?: WidgetPlacement;
   [key: string]: unknown;
 };
+
+const MAP_KINDS = new Set<MapKind>(["markets", "venues", "routing", "clusters"]);
 
 type Bullet = {
   emoji?: string;
@@ -16,7 +20,10 @@ export type WhyTable = {
   rows: string[][];
 };
 
+export type ResponseKind = "map" | "table" | "neither";
+
 export type AskArtieResponse = {
+  responseKind: ResponseKind;
   theAnswer: string;
   why: Bullet[];
   whatIRecommend: Bullet[];
@@ -27,6 +34,8 @@ export type AskArtieResponse = {
   whyTable?: WhyTable;
 };
 
+const RESPONSE_KINDS = new Set<ResponseKind>(["map", "table", "neither"]);
+
 const WIDGET_PLACEMENTS = new Set<WidgetPlacement>([
   "answer",
   "why",
@@ -35,27 +44,29 @@ const WIDGET_PLACEMENTS = new Set<WidgetPlacement>([
 ]);
 
 export const ASK_ARTIE_RESPONSE_JSON_SCHEMA = `{
+  "responseKind": "map | table | neither — the evidence form this answer requires. CLASSIFY FIRST before generating any other field.",
   "theAnswer": "One short paragraph that states the recommendation directly. Name the artist and the primary city/market when relevant. No bullets — prose only.",
   "why": [
-    { "emoji": "🎯", "text": "Lead evidence point with the strongest signal or number." },
-    { "emoji": "📊", "text": "Second supporting data point." },
-    { "emoji": "🌎", "text": "Third supporting point — context, region, or history." }
+    { "text": "Lead evidence point with the strongest signal or number. No emoji — plain text only." },
+    { "text": "Second supporting data point." },
+    { "text": "Third supporting point — context, region, or history." }
   ],
   "whatIRecommend": [
-    { "emoji": "✅", "text": "Primary concrete action." },
-    { "emoji": "🗺️", "text": "Second concrete action." },
-    { "emoji": "🎯", "text": "Third concrete action." }
+    { "text": "Primary concrete action. No emoji — plain text only." },
+    { "text": "Second concrete action." },
+    { "text": "Third concrete action." }
   ],
   "whatToExpect": [
-    { "emoji": "📈", "text": "Expected outcome or performance signal." },
-    { "emoji": "🎯", "text": "Risk, caveat, or follow-on decision to watch." }
+    { "text": "Expected outcome or performance signal. No emoji — plain text only." },
+    { "text": "Risk, caveat, or follow-on decision to watch." }
   ],
   "methodology": "Optional one-sentence note on how the recommendation was measured. Renders as a small footer.",
   "widgets": [
     {
       "type": "map",
       "placement": "why",
-      "points": "Only used for WHERE/location/touring questions. Exactly one map widget, placement must be 'why'. No other widget types are allowed."
+      "mapKind": "markets | venues | routing | clusters — pick exactly one. 'markets' for audience/market geography across a region or country (3-8 curated top points). 'venues' for recommended venues/clubs/halls within a single city (3-8 points, map zooms to that city). 'routing' for tour plans where stop order matters (3-8 points, a line connects them in array order). 'clusters' when the question asks for the SHAPE of a distribution across many points (20-60 points; the map auto-groups overlapping points and reveals them on zoom).",
+      "points": "Only used for WHERE/location/touring questions. Exactly one map widget, placement must be 'why'. Each point: { name, latitude, longitude, value?, label? }. Point count by mapKind: markets/venues/routing 3-8, clusters 20-60. For mapKind='routing' the array ORDER is the tour order — first item is stop #1. No other widget types are allowed."
     }
   ],
   "whyTable": {
@@ -112,7 +123,9 @@ function normalizeWidgets(value: unknown): ResponseWidget[] {
         return { ...widget, type: "table", placement } as ResponseWidget;
       }
       if (widget.type === "map" && Array.isArray(widget.points)) {
-        return { ...widget, type: "map", placement } as ResponseWidget;
+        const mapKindRaw = asString(widget.mapKind) as MapKind;
+        const mapKind: MapKind = MAP_KINDS.has(mapKindRaw) ? mapKindRaw : "markets";
+        return { ...widget, type: "map", placement, mapKind } as ResponseWidget;
       }
       if (widget.type === "barChart" && Array.isArray(widget.data)) {
         return { ...widget, type: "barChart", placement } as ResponseWidget;
@@ -126,6 +139,11 @@ export function parseAskArtieResponse(raw: string): AskArtieResponse {
   const json = extractJson(raw);
   const parsed = JSON.parse(json) as unknown;
   if (!isRecord(parsed)) throw new Error("Response must be a JSON object");
+
+  const responseKind = asString(parsed.responseKind) as ResponseKind;
+  if (!RESPONSE_KINDS.has(responseKind)) {
+    throw new Error("responseKind must be 'map', 'table', or 'neither'");
+  }
 
   const theAnswer = asString(parsed.theAnswer);
   if (!theAnswer) throw new Error("Missing theAnswer paragraph");
@@ -144,6 +162,7 @@ export function parseAskArtieResponse(raw: string): AskArtieResponse {
   const whyTable = normalizeWhyTable(parsed.whyTable);
 
   return {
+    responseKind,
     theAnswer,
     why,
     whatIRecommend,
@@ -185,7 +204,7 @@ export function renderAskArtieResponse(response: AskArtieResponse) {
     (response.widgets ?? []).filter((widget) => (widget.placement ?? "why") === placement);
 
   const renderBullets = (items: Bullet[]) =>
-    items.map((b) => `- ${b.emoji ? `${b.emoji} ` : ""}${b.text}`).join("\n");
+    items.map((b) => `- ${b.text}`).join("\n");
 
   const renderWidgets = (placement: WidgetPlacement) =>
     widgetsByPlacement(placement).flatMap((widget) => [

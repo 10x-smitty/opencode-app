@@ -5,6 +5,7 @@ import { createClient, Session } from "@supabase/supabase-js";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ResponseWidget } from "@/components/ResponseWidgets";
+import { markdownComponents } from "@/components/MarkdownComponents";
 import { extractSuggestions, splitMessageWidgets } from "@/lib/widgets";
 import type { ArtistOption, ArtistSearchResult, ChatMessage, ChatSession } from "@/types/chat";
 
@@ -59,7 +60,11 @@ function MessageContent({ message }: { message: ChatMessage }) {
         segment.type === "widget" ? (
           <ResponseWidget key={`widget-${index}`} widget={segment.widget} />
         ) : (
-          <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
             {segment.content}
           </ReactMarkdown>
         ),

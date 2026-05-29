@@ -1,11 +1,19 @@
 "use client";
 
-import type { FeatureCollection, Point } from "geojson";
-import type { StyleSpecification } from "maplibre-gl";
 import { useMemo, useState } from "react";
 import * as d3 from "d3";
-import Map, { Layer, Marker, NavigationControl, Popup, Source } from "react-map-gl/maplibre";
-import type { LayerProps } from "react-map-gl/maplibre";
+import {
+  Map,
+  MapClusterLayer,
+  MapControls,
+  MapMarker,
+  MapPopup,
+  MapRoute,
+  MarkerContent,
+  MarkerLabel,
+  MarkerPopup,
+} from "@/components/ui/map";
+import { Info, TrendingUp } from "lucide-react";
 
 type WidgetColumn = {
   key: string;
@@ -35,11 +43,28 @@ type MapPoint = {
   label?: string;
 };
 
+type MapKind = "markets" | "venues" | "routing" | "clusters";
+
 type MapWidget = {
   type: "map";
   title?: string;
   description?: string;
+  mapKind?: MapKind;
   points: MapPoint[];
+};
+
+const POINT_NOUN: Record<MapKind, string> = {
+  markets: "Market",
+  venues: "Venue",
+  routing: "Stop",
+  clusters: "Location",
+};
+
+type ClusterPointProperties = {
+  name: string;
+  index: number;
+  value?: string | number;
+  label?: string;
 };
 
 type ChartDatum = {
@@ -58,103 +83,10 @@ type BarChartWidget = {
 
 export type ArtieWidget = TableWidget | MapWidget | BarChartWidget;
 
-type WeightedMapPoint = MapPoint & {
+type ValidMapPoint = MapPoint & {
   latitude: number;
   longitude: number;
   numericValue: number;
-  heatmapWeight: number;
-};
-
-const MAP_STYLE = {
-  version: 8,
-  sources: {
-    "carto-dark": {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    },
-  },
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: {
-        "background-color": "#111413",
-      },
-    },
-    {
-      id: "carto-dark",
-      type: "raster",
-      source: "carto-dark",
-      minzoom: 0,
-      maxzoom: 18,
-    },
-  ],
-} satisfies StyleSpecification;
-const HEATMAP_SOURCE_ID = "artie-heatmap-points";
-const HEATMAP_POINT_LAYER_ID = "artie-heatmap-click-targets";
-
-const heatmapLayer: LayerProps = {
-  id: "artie-heatmap-density",
-  type: "heatmap",
-  source: HEATMAP_SOURCE_ID,
-  maxzoom: 9,
-  paint: {
-    "heatmap-weight": ["interpolate", ["linear"], ["get", "weight"], 0, 0.15, 1, 2.25],
-    "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1.05, 3, 1.9, 7, 2.85],
-    "heatmap-color": [
-      "interpolate",
-      ["linear"],
-      ["heatmap-density"],
-      0,
-      "rgba(85, 198, 223, 0)",
-      0.06,
-      "rgba(85, 198, 223, 0.48)",
-      0.16,
-      "rgba(145, 221, 255, 0.82)",
-      0.28,
-      "rgba(255, 255, 238, 0.92)",
-      0.42,
-      "rgba(255, 193, 92, 0.98)",
-      1,
-      "rgba(255, 118, 96, 1)",
-    ],
-    "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 20, 3, 34, 6, 58],
-    "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 2, 0.96, 9, 0.62],
-  },
-};
-
-const heatmapClickLayer: LayerProps = {
-  id: HEATMAP_POINT_LAYER_ID,
-  type: "circle",
-  source: HEATMAP_SOURCE_ID,
-  paint: {
-    "circle-radius": ["interpolate", ["linear"], ["get", "weight"], 0, 2, 0.55, 4, 1, 9],
-    "circle-color": [
-      "interpolate",
-      ["linear"],
-      ["get", "weight"],
-      0,
-      "#78d8ff",
-      0.5,
-      "#f9ffff",
-      0.72,
-      "#ffd06a",
-      1,
-      "#ffab4a",
-    ],
-    "circle-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.74, 5, 0.88],
-    "circle-stroke-color": "#f7ffff",
-    "circle-stroke-opacity": 0.7,
-    "circle-stroke-width": 1,
-    "circle-blur": 0.16,
-  },
 };
 
 function formatCell(value: unknown) {
@@ -182,7 +114,7 @@ function toFiniteCoordinate(value: number | string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizeMapPoint(point: MapPoint): WeightedMapPoint | null {
+function normalizeMapPoint(point: MapPoint): ValidMapPoint | null {
   const latitude = toFiniteCoordinate(point.latitude);
   const longitude = toFiniteCoordinate(point.longitude);
 
@@ -200,7 +132,6 @@ function normalizeMapPoint(point: MapPoint): WeightedMapPoint | null {
     latitude,
     longitude,
     numericValue: numericPointValue(point),
-    heatmapWeight: 0.8,
   };
 }
 
@@ -315,58 +246,96 @@ function DataTableWidget({ widget }: { widget: TableWidget }) {
   );
 }
 
+function PointPopupBody({
+  pointNoun,
+  index,
+  name,
+  value,
+  label,
+}: {
+  pointNoun: string;
+  index: number;
+  name: string;
+  value?: string | number;
+  label?: string;
+}) {
+  return (
+    <div className="space-y-2 p-3">
+      <div>
+        <p className="text-muted-foreground pb-0.5 text-[11px] font-medium tracking-wide uppercase">
+          {pointNoun} #{index + 1}
+        </p>
+        <h3 className="text-foreground leading-tight font-semibold">{name}</h3>
+      </div>
+      {value !== undefined && value !== "" ? (
+        <div className="flex items-center gap-1.5 text-sm">
+          <TrendingUp className="size-3.5 text-amber-400" />
+          <span className="font-medium">{formatCell(value)}</span>
+        </div>
+      ) : null}
+      {label ? (
+        <div className="text-muted-foreground flex items-start gap-1.5 text-sm">
+          <Info className="size-3.5 mt-0.5 shrink-0" />
+          <span>{label}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DataMapWidget({ widget }: { widget: MapWidget }) {
-  const [selectedPointName, setSelectedPointName] = useState<string | null>(null);
-  const validPoints = useMemo(
+  const mapKind: MapKind =
+    widget.mapKind && widget.mapKind in POINT_NOUN ? widget.mapKind : "markets";
+  const pointNoun = POINT_NOUN[mapKind];
+
+  const validPoints = useMemo<ValidMapPoint[]>(
     () =>
       widget.points
         .map(normalizeMapPoint)
-        .filter((point): point is WeightedMapPoint => Boolean(point)),
+        .filter((point): point is ValidMapPoint => Boolean(point)),
     [widget.points],
   );
-  const valuedPoints = useMemo<WeightedMapPoint[]>(() => {
-    const maxValue = d3.max(validPoints, (point) => point.numericValue) ?? 1;
-    const minValue = d3.min(validPoints, (point) => point.numericValue) ?? 0;
-    const weightScale =
-      minValue === maxValue
-        ? () => 0.8
-        : d3.scaleSqrt().domain([minValue, maxValue]).range([0.18, 1]);
 
-    return validPoints.map((point) => ({
-      ...point,
-      heatmapWeight: weightScale(point.numericValue),
-    }));
-  }, [validPoints]);
+  const routeCoordinates = useMemo<[number, number][]>(() => {
+    if (mapKind !== "routing" || validPoints.length < 2) return [];
+    return validPoints.map((point) => [point.longitude, point.latitude]);
+  }, [mapKind, validPoints]);
 
-  const geoJson = useMemo<FeatureCollection<Point>>(
-    () => ({
+  const clusterFeatures = useMemo<
+    GeoJSON.FeatureCollection<GeoJSON.Point, ClusterPointProperties> | null
+  >(() => {
+    if (mapKind !== "clusters") return null;
+    return {
       type: "FeatureCollection",
-      features: valuedPoints.map((point) => ({
+      features: validPoints.map((point, index) => ({
         type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [point.longitude, point.latitude],
-        },
+        geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
         properties: {
           name: point.name,
-          value: point.value ?? "",
-          label: point.label ?? "",
-          metric: point.numericValue,
-          weight: point.heatmapWeight,
+          index,
+          value: typeof point.value === "string" || typeof point.value === "number"
+            ? point.value
+            : undefined,
+          label: point.label,
         },
       })),
-    }),
-    [valuedPoints],
-  );
+    };
+  }, [mapKind, validPoints]);
 
-  const initialViewState = useMemo(() => {
+  const [selectedClusterPoint, setSelectedClusterPoint] = useState<{
+    coordinates: [number, number];
+    properties: ClusterPointProperties;
+  } | null>(null);
+
+  const mapInit = useMemo(() => {
     if (!validPoints.length) {
-      return { latitude: 39.5, longitude: -98.35, zoom: 3 };
+      return { center: [-98.35, 39.5] as [number, number], zoom: 3 };
     }
 
     if (validPoints.length === 1) {
       const only = validPoints[0];
-      return { latitude: only.latitude, longitude: only.longitude, zoom: 6 };
+      const soloZoom = mapKind === "venues" ? 12 : 6;
+      return { center: [only.longitude, only.latitude] as [number, number], zoom: soloZoom };
     }
 
     const latExtent = d3.extent(validPoints, (point) => point.latitude);
@@ -376,94 +345,106 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
     const minLon = lonExtent[0] ?? 0;
     const maxLon = lonExtent[1] ?? 0;
 
+    // Venues sit in one city; allow tighter zoom so streets are legible.
+    // Clusters keep a lower ceiling so initial view stays clustered.
+    let maxZoom = 8;
+    if (mapKind === "venues") maxZoom = 13;
+    if (mapKind === "clusters") maxZoom = 6;
+
     return {
       bounds: [
         [minLon, minLat],
         [maxLon, maxLat],
       ] as [[number, number], [number, number]],
-      fitBoundsOptions: { padding: 56, maxZoom: 8 },
+      fitBoundsOptions: { padding: 56, maxZoom },
     };
-  }, [validPoints]);
-
-  const selectedPoint =
-    valuedPoints.find((point) => point.name === selectedPointName) ?? null;
+  }, [mapKind, validPoints]);
 
   return (
     <WidgetFrame title={widget.title} description={widget.description} className="artie-map-widget">
-      <div className="artie-map-layout">
-        {valuedPoints.length ? (
-          <>
-            <div className="artie-map">
-              <Map
-                initialViewState={initialViewState}
-                mapStyle={MAP_STYLE}
-                style={{ width: "100%", height: "100%" }}
-                attributionControl={false}
-                cooperativeGestures
-              >
-                <NavigationControl position="top-right" showCompass={false} />
-                <Source id={HEATMAP_SOURCE_ID} type="geojson" data={geoJson}>
-                  <Layer {...heatmapLayer} />
-                  <Layer {...heatmapClickLayer} />
-                </Source>
-                {valuedPoints.map((point, index) => (
-                  <Marker
-                    key={`${point.name}-marker-${index}`}
-                    latitude={point.latitude}
-                    longitude={point.longitude}
-                    anchor="center"
-                    onClick={(event) => {
-                      event.originalEvent.stopPropagation();
-                      setSelectedPointName(point.name);
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="artie-map-marker"
-                      aria-label={`Show ${point.name}`}
-                    >
-                      <span>{index + 1}</span>
-                    </button>
-                  </Marker>
-                ))}
-                {selectedPoint ? (
-                  <Popup
-                    latitude={selectedPoint.latitude}
-                    longitude={selectedPoint.longitude}
-                    anchor="top"
+      {validPoints.length ? (
+        <div className="artie-map">
+          <Map theme="dark" cooperativeGestures className="h-full w-full" {...mapInit}>
+            <MapControls />
+
+            {mapKind === "clusters" && clusterFeatures ? (
+              <>
+                <MapClusterLayer<ClusterPointProperties>
+                  data={clusterFeatures}
+                  clusterColors={["#FCD34D", "#FBBF24", "#F59E0B"]}
+                  clusterThresholds={[10, 30]}
+                  pointColor="#FBBF24"
+                  onPointClick={(feature, coordinates) => {
+                    const properties = feature.properties;
+                    if (!properties) return;
+                    setSelectedClusterPoint({
+                      coordinates: coordinates as [number, number],
+                      properties,
+                    });
+                  }}
+                />
+                {selectedClusterPoint ? (
+                  <MapPopup
+                    longitude={selectedClusterPoint.coordinates[0]}
+                    latitude={selectedClusterPoint.coordinates[1]}
                     closeButton
-                    closeOnClick={false}
-                    onClose={() => setSelectedPointName(null)}
-                    offset={20}
+                    onClose={() => setSelectedClusterPoint(null)}
+                    className="w-64 p-0"
                   >
-                    <div className="artie-map-popup">
-                      <strong>{selectedPoint.name}</strong>
-                      {selectedPoint.value !== undefined ? <span>{formatCell(selectedPoint.value)}</span> : null}
-                      {selectedPoint.label ? <p>{selectedPoint.label}</p> : null}
-                    </div>
-                  </Popup>
+                    <PointPopupBody
+                      pointNoun={pointNoun}
+                      index={selectedClusterPoint.properties.index}
+                      name={selectedClusterPoint.properties.name}
+                      value={selectedClusterPoint.properties.value}
+                      label={selectedClusterPoint.properties.label}
+                    />
+                  </MapPopup>
                 ) : null}
-              </Map>
-            </div>
-            <ol className="artie-map-list" aria-label={`${widget.title ?? "Map"} locations`}>
-              {valuedPoints.map((point, index) => (
-                <li key={`${point.name}-list-${index}`}>
-                  <button type="button" onClick={() => setSelectedPointName(point.name)}>
-                    <span>{index + 1}</span>
-                    <strong>{point.name}</strong>
-                    {point.value !== undefined ? <em>{formatCell(point.value)}</em> : null}
-                    {point.label ? <small>{point.label}</small> : null}
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </>
-        ) : (
-          <div className="artie-map-empty">
-            No valid coordinates were provided for this map.
-          </div>
-        )}
-      </div>
+              </>
+            ) : (
+              <>
+                {routeCoordinates.length >= 2 ? (
+                  <MapRoute
+                    coordinates={routeCoordinates}
+                    color="#FBBF24"
+                    width={3}
+                    opacity={0.9}
+                    dashArray={[2, 2]}
+                    interactive={false}
+                  />
+                ) : null}
+                {validPoints.map((point, index) => (
+                  <MapMarker
+                    key={`${point.name}-marker-${index}`}
+                    longitude={point.longitude}
+                    latitude={point.latitude}
+                  >
+                    <MarkerContent>
+                      <div className="bg-amber-400 border-white text-background relative flex size-5 cursor-pointer items-center justify-center rounded-full border-2 text-[10px] font-semibold shadow-lg transition-transform hover:scale-110">
+                        {mapKind === "routing" ? index + 1 : null}
+                      </div>
+                      <MarkerLabel position="bottom">{point.name}</MarkerLabel>
+                    </MarkerContent>
+                    <MarkerPopup className="w-64 p-0">
+                      <PointPopupBody
+                        pointNoun={pointNoun}
+                        index={index}
+                        name={point.name}
+                        value={point.value}
+                        label={point.label}
+                      />
+                    </MarkerPopup>
+                  </MapMarker>
+                ))}
+              </>
+            )}
+          </Map>
+        </div>
+      ) : (
+        <div className="artie-map-empty">
+          No valid coordinates were provided for this map.
+        </div>
+      )}
     </WidgetFrame>
   );
 }

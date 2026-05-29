@@ -98,30 +98,7 @@ function isRetryableOpencodeError(error: unknown) {
   );
 }
 
-function isLocationPrompt(content: string) {
-  return /\b(location|locations|city|cities|market|markets|map|geo|geography|region|regions|tour|touring|route|routing|fanbase|audience location|where)\b/i.test(
-    content,
-  );
-}
-
 function buildAskArtiePrompt(content: string, chartmetricContext: string) {
-  const wantsLocationAnswer = isLocationPrompt(content);
-  const evidenceRules = wantsLocationAnswer
-    ? [
-        "EVIDENCE FORMAT — this is a WHERE/location question:",
-        "- Include EXACTLY ONE `map` widget in `widgets` with `placement: \"why\"`. No other widgets, no `whyTable`.",
-        "- Each map point must have name, latitude, longitude, and a value or label.",
-        "- Limit to the 3-8 highest-priority markets.",
-        "- If you genuinely cannot supply coordinates, omit the map AND omit `whyTable`; just describe the locations in the `why` bullets.",
-      ]
-    : [
-        "EVIDENCE FORMAT — this is NOT a location question:",
-        "- Do NOT include any widgets. Leave `widgets` empty or omit it entirely.",
-        "- If a comparison table would help (e.g. ranked superfans, top songs), populate `whyTable` with `columns` and `rows`. The app renders it as a Markdown table inside the Why section.",
-        "- `whyTable` is optional — omit it entirely if a table doesn't add value.",
-        "- Never include a `table`, `map`, or `barChart` widget for non-location questions.",
-      ];
-
   return [
     "You are Ask Artie. Answer the user's question using the artist data context below as the primary source of truth.",
     "Return valid JSON only. Do not return Markdown prose outside the JSON object.",
@@ -129,19 +106,75 @@ function buildAskArtiePrompt(content: string, chartmetricContext: string) {
     "Required JSON shape:",
     ASK_ARTIE_RESPONSE_JSON_SCHEMA,
     "",
+    "STEP 1 — CLASSIFY the question (set `responseKind`):",
+    "",
+    "Use `responseKind: \"map\"` when the answer's primary axis is GEOGRAPHIC — where something is happening, concentrated, or should happen. Examples:",
+    "- Tour planning / routing: 'Where should I tour?', 'What's the next city after Santiago?', 'Plan a South American leg'",
+    "- Market priority: 'Which markets should I focus on?', 'Top market in Europe?', 'Where should I do press?'",
+    "- Audience geography: 'Where do my listeners live?', 'What cities have the most fans?', 'Where are my Instagram followers?'",
+    "- Growth / momentum geo: 'Where are my fans growing fastest?', 'Cities trending up for me'",
+    "- Gap analysis: 'Cities I haven't played but should', 'Under-served markets'",
+    "- Show / venue placement: 'Where should the release event be?', 'Best city for the album launch?'",
+    "",
+    "Use `responseKind: \"table\"` when the answer is a RANKED OR COMPARED LIST OF NAMED ENTITIES (people, tracks, playlists, artists, posts, releases). Examples:",
+    "- People rankings: 'Who are my superfans?', 'Top influential fans?', 'Biggest playlist curators?'",
+    "- Track rankings: 'What are my top songs?', 'Which tracks grew the most?', 'Most-saved tracks?', 'Top-earning songs?'",
+    "- Playlist rankings: 'What playlists is my music on?', 'Which playlists send the most streams?'",
+    "- Artist comparison: 'Similar artists I should watch?', 'Top collab candidates?', 'Closest peer in my genre?'",
+    "- Content / platform compare: 'Which content types perform best?', 'Which DSPs send the most listeners?'",
+    "- Show / release history: 'Which shows sold through best?', 'Compare my last three releases'",
+    "",
+    "Use `responseKind: \"neither\"` when the question is general guidance, strategy, or doesn't require a map or comparison table. Examples: 'How should I price merch?', 'When should I release the single?', 'What should I focus on?'",
+    "",
+    "DISAMBIGUATION (the most common mistakes — read carefully):",
+    "- 'Top fans in NYC' → \"table\". The location is a FILTER; the answer is a ranked list of named fans. A single-pin map of NYC is useless here.",
+    "- 'How are my songs doing in Europe?' → \"table\". The answer is a ranked list of songs with stream counts; Europe is a filter context.",
+    "- 'Where are my top songs streamed most?' → \"map\". Geographic distribution IS the answer.",
+    "- 'Compare my touring markets' → \"map\" (geographic comparison is more informative when coords are available).",
+    "- If you can't pick confidently, use \"neither\".",
+    "",
+    "STEP 2 — EVIDENCE FORMAT (driven by `responseKind`):",
+    "- If `responseKind === \"map\"`: include EXACTLY ONE `map` widget with `placement: \"why\"`. Each point needs name, latitude, longitude, and a value or label. Point count depends on `mapKind` (see STEP 2A). Do NOT include `whyTable`. If you genuinely cannot supply coordinates, switch to `responseKind: \"table\"` or `\"neither\"` instead.",
+    "- If `responseKind === \"table\"`: do NOT include any widgets. Populate `whyTable` with `columns` and `rows`. The app renders it as a Markdown table inside the Why section.",
+    "- If `responseKind === \"neither\"`: do NOT include any widgets and do NOT include `whyTable`. The bullets alone carry the answer.",
+    "- NEVER combine widgets with `whyTable`. NEVER include more than one widget. The server strips violations and re-runs the response, slowing the user down.",
+    "",
+    "STEP 2A — MAP KIND (only when `responseKind === \"map\"`, set `widgets[0].mapKind`):",
+    "",
+    "Use `mapKind: \"markets\"` when the points are spread across a region/country/continent and the takeaway is WHERE the audience or activity is. Examples:",
+    "- 'Where do my listeners live?', 'Top markets for my music?', 'Where are my Instagram followers concentrated?'",
+    "- 'Compare my touring markets', 'Where is my fan growth strongest?', 'Cities trending up for me'",
+    "- 'Where are my top songs streamed most?'",
+    "→ Markers only, no connecting lines. The map auto-fits to the regional bounds (country/continent scale).",
+    "",
+    "Use `mapKind: \"venues\"` when the answer is a list of specific places (venues, clubs, halls, hotels, neighborhoods, stores) INSIDE a single city or metro. Examples:",
+    "- 'What venues should I consider in Chicago?', 'Recommended clubs in Berlin?', 'Where should the album launch event be in LA?'",
+    "- 'Best neighborhoods for street-team flyering in Austin?', 'Record stores to hit in Tokyo?'",
+    "→ Markers only, no connecting lines. The map zooms to the city/metro level (street-grid visible). Every point must be inside the same city/metro.",
+    "",
+    "Use `mapKind: \"routing\"` when the answer is an ORDERED itinerary across multiple cities — a tour leg, a press circuit, a route plan. Examples:",
+    "- 'Plan a South American tour leg', 'Routing for a US summer tour?', 'Best order to play these cities?', 'What's the next city after Santiago?'",
+    "- 'Lay out a 5-city press run in Europe'",
+    "→ Markers PLUS a connecting line drawn through points in array order. The array ORDER must be the travel order — first item is stop #1, last item is the final stop. Order points to minimize backtracking. Limit 3-8 points.",
+    "",
+    "Use `mapKind: \"clusters\"` when the answer is the SHAPE of a distribution across many locations — density, coverage, footprint — rather than a curated top-N ranking. Examples:",
+    "- 'Where do I have ANY listeners?', 'Map my full audience footprint', 'Show every city with Spotify streams'",
+    "- 'Every TikTok creator who used my music, mapped', 'All playlists that added me, by curator location'",
+    "- 'Every venue I've played in the last 3 years', 'My complete tour history on a map'",
+    "→ Emit 20-60 points (more is better for distribution shape). The map auto-groups nearby points into colored circles and reveals individuals on zoom. Do NOT use clusters for top-N or comparison questions — use 'markets' instead.",
+    "",
+    "DEFAULT: if you're unsure, prefer `markets`. Only reach for `clusters` when the user explicitly asks for full coverage / every-X / footprint / where-anywhere phrasing AND you can supply 20+ real coordinates. Only reach for `routing` when stop order is explicitly the value of the answer.",
+    "",
     "Grounding rules:",
     "- Only claim a metric, ranking, location, demographic, revenue figure, or connector result if it appears in the artist data context or the user's message.",
     "- Do not claim OAuth, live Spotify account, Instagram account, TikTok account, merch, email, ticketing, revenue, or other connector data unless present.",
     "- Do not promise that a pasted Chartmetric link or OAuth request will automatically connect live data from chat. Say the server data source must be configured, or ask the user to paste/export metrics.",
     "- If data is unavailable or the selected artist has no connected data, say that plainly in `theAnswer` before recommending next steps.",
     "- `theAnswer` is one prose paragraph. Name the artist and the primary market/city when the context allows it. No bullets, no headings.",
-    "- `why`, `whatIRecommend`, and `whatToExpect` are bullet arrays. Each bullet is an object with an `emoji` and a `text` field. Lead every bullet with a contextually appropriate emoji (🎯 📊 🌎 🏟️ 📈 ✅ 🗺️ 🇧🇷 etc).",
+    "- `why`, `whatIRecommend`, and `whatToExpect` are bullet arrays. Each bullet is an object with a `text` field only. Do NOT include an `emoji` field on bullets — emojis belong on the section headers, not the bullets.",
     "- Label judgment calls as recommendations or assumptions inside the relevant bullet text.",
     "- If confidence is low or data is missing, surface that in `whatToExpect` or in the optional `methodology` footer.",
     "- `suggestions` is an array of 2-4 short follow-up questions the user would plausibly ask next, given this answer. Each suggestion must be under 8 words, end with `?`, and reference something concrete from this answer (a city, metric, market, etc.). Examples: 'How big is the Santiago audience?', 'What venue size in Buenos Aires?'. Do not repeat the user's original question.",
-    "",
-    ...evidenceRules,
-    "- IMPORTANT: pick ONE evidence form per response. Never combine widgets with `whyTable`, and never include more than one widget. The server strips violations.",
     "",
     "<artist_data_context>",
     chartmetricContext,
@@ -153,22 +186,32 @@ function buildAskArtiePrompt(content: string, chartmetricContext: string) {
   ].join("\n");
 }
 
-function enforceResponsePolicy(
-  response: AskArtieResponse,
-  wantsLocationAnswer: boolean,
-): AskArtieResponse {
-  if (wantsLocationAnswer) {
+function enforceResponsePolicy(response: AskArtieResponse): AskArtieResponse {
+  if (response.responseKind === "map") {
     const firstMap = (response.widgets ?? []).find((widget) => widget.type === "map");
+    const allowedMapKinds = new Set(["markets", "venues", "routing", "clusters"]);
+    const rawMapKind = firstMap?.mapKind;
+    const mapKind =
+      typeof rawMapKind === "string" && allowedMapKinds.has(rawMapKind) ? rawMapKind : "markets";
     return {
       ...response,
-      widgets: firstMap ? [{ ...firstMap, placement: "why" }] : [],
+      widgets: firstMap ? [{ ...firstMap, placement: "why", mapKind }] : [],
       whyTable: undefined,
     };
   }
 
+  if (response.responseKind === "table") {
+    return {
+      ...response,
+      widgets: [],
+    };
+  }
+
+  // responseKind === "neither"
   return {
     ...response,
     widgets: [],
+    whyTable: undefined,
   };
 }
 
@@ -193,31 +236,27 @@ function renderFallbackReply(validationError: unknown) {
     validationError instanceof Error ? validationError.message : String(validationError);
 
   return renderAskArtieResponse({
+    responseKind: "neither",
     theAnswer:
       "Ask Artie couldn't validate the model response, so no answer was rendered. Re-ask the question with the metric, city, platform, or decision you want prioritized and a fresh answer will be generated.",
     why: [
       {
-        emoji: "⚠️",
         text: `The model response failed the Ask Artie schema check: ${errorMessage}`,
       },
       {
-        emoji: "🛡️",
         text: "No unsupported metrics or malformed widgets were rendered from the invalid output.",
       },
     ],
     whatIRecommend: [
       {
-        emoji: "🔁",
         text: "Re-run the question, ideally with the key metric, market, or platform you want prioritized.",
       },
       {
-        emoji: "📎",
         text: "Use the available Chartmetric data or paste the metrics you want analyzed as the source of truth.",
       },
     ],
     whatToExpect: [
       {
-        emoji: "🎯",
         text: "A re-asked question typically produces a valid structured answer; persistent failures usually indicate missing connector data.",
       },
     ],
@@ -225,17 +264,11 @@ function renderFallbackReply(validationError: unknown) {
   });
 }
 
-async function getValidatedReply(
-  opencodeSessionId: string,
-  prompt: string,
-  wantsLocationAnswer: boolean,
-) {
+async function getValidatedReply(opencodeSessionId: string, prompt: string) {
   const rawReply = await promptOpencode(opencodeSessionId, prompt);
 
   const renderEnforced = (raw: string) =>
-    renderAskArtieResponse(
-      enforceResponsePolicy(parseAskArtieResponse(raw), wantsLocationAnswer),
-    );
+    renderAskArtieResponse(enforceResponsePolicy(parseAskArtieResponse(raw)));
 
   try {
     return renderEnforced(rawReply);
@@ -294,11 +327,10 @@ export async function POST(request: Request) {
 
     const chartmetricContext = await getChartmetricArtistContext(body.artistId, body.artistName);
     const prompt = buildAskArtiePrompt(content, chartmetricContext);
-    const wantsLocationAnswer = isLocationPrompt(content);
 
     let reply: string;
     try {
-      reply = await getValidatedReply(session.opencode_session_id, prompt, wantsLocationAnswer);
+      reply = await getValidatedReply(session.opencode_session_id, prompt);
     } catch (error) {
       if (!isRetryableOpencodeError(error)) throw error;
 
@@ -308,7 +340,7 @@ export async function POST(request: Request) {
       });
 
       const refreshed = await refreshOpencodeSession(session.id, content.slice(0, 72));
-      reply = await getValidatedReply(refreshed.opencode_session_id, prompt, wantsLocationAnswer);
+      reply = await getValidatedReply(refreshed.opencode_session_id, prompt);
     }
 
     const assistantMessage = await pool.query(
