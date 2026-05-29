@@ -5,7 +5,7 @@ import { createClient, Session } from "@supabase/supabase-js";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ResponseWidget } from "@/components/ResponseWidgets";
-import { splitMessageWidgets } from "@/lib/widgets";
+import { extractSuggestions, splitMessageWidgets } from "@/lib/widgets";
 import type { ArtistOption, ArtistSearchResult, ChatMessage, ChatSession } from "@/types/chat";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -96,6 +96,16 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false);
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId);
   const activeChatSession = chatSessions.find((item) => item.id === activeSessionId);
+  const followUpSuggestions = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.role !== "assistant") continue;
+      const found = extractSuggestions(message.content);
+      if (found.length) return found.slice(0, 4);
+      return [];
+    }
+    return [];
+  }, [messages]);
 
   const authHeaders = useMemo(
     () =>
@@ -204,12 +214,10 @@ export default function Home() {
     setStatus("");
   }
 
-  async function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitContent(rawContent: string) {
+    const content = rawContent.trim();
+    if (!content || !session?.access_token || isSending) return;
 
-    if (!draft.trim() || !session?.access_token) return;
-
-    const content = draft.trim();
     setDraft("");
     setIsSending(true);
     setStatus("");
@@ -272,6 +280,11 @@ export default function Home() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    return submitContent(draft);
   }
 
   async function startNewChat(artistOverride = selectedArtist) {
@@ -745,6 +758,21 @@ export default function Home() {
         </div>
 
         <div className="composer-shell">
+          {followUpSuggestions.length > 0 && !isSending ? (
+            <div className="follow-up-suggestions" aria-label="Suggested follow-up questions">
+              {followUpSuggestions.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  className="follow-up-chip"
+                  onClick={() => submitContent(question)}
+                  disabled={isSending}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <form onSubmit={sendMessage} className="composer">
             <textarea
               value={draft}

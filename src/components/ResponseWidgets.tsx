@@ -4,8 +4,8 @@ import type { FeatureCollection, Point } from "geojson";
 import type { StyleSpecification } from "maplibre-gl";
 import { useMemo, useState } from "react";
 import * as d3 from "d3";
-import Map, { Layer, NavigationControl, Popup, Source } from "react-map-gl/maplibre";
-import type { LayerProps, MapLayerMouseEvent } from "react-map-gl/maplibre";
+import Map, { Layer, Marker, NavigationControl, Popup, Source } from "react-map-gl/maplibre";
+import type { LayerProps } from "react-map-gl/maplibre";
 
 type WidgetColumn = {
   key: string;
@@ -63,11 +63,6 @@ type WeightedMapPoint = MapPoint & {
   longitude: number;
   numericValue: number;
   heatmapWeight: number;
-};
-
-type ProjectedMapPoint = WeightedMapPoint & {
-  xPercent: number;
-  yPercent: number;
 };
 
 const MAP_STYLE = {
@@ -168,10 +163,10 @@ function formatCell(value: unknown) {
 }
 
 function numericPointValue(point: MapPoint) {
-  if (typeof point.value === "number") return point.value;
+  if (typeof point.value === "number") return Number.isFinite(point.value) ? point.value : 1;
+  if (typeof point.value !== "string") return 1;
 
-  const source = String(point.value ?? point.label ?? "");
-  const match = source.replace(/,/g, "").match(/-?\d+(?:\.\d+)?\s*k?/i);
+  const match = point.value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?\s*k?/i);
   if (!match) return 1;
 
   const parsed = Number.parseFloat(match[0]);
@@ -207,36 +202,6 @@ function normalizeMapPoint(point: MapPoint): WeightedMapPoint | null {
     numericValue: numericPointValue(point),
     heatmapWeight: 0.8,
   };
-}
-
-function mercatorY(latitude: number) {
-  const clamped = Math.max(-85, Math.min(85, latitude));
-  const radians = (clamped * Math.PI) / 180;
-  return (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2;
-}
-
-function projectMapPoints(points: WeightedMapPoint[]): ProjectedMapPoint[] {
-  if (!points.length) return [];
-
-  const rawPoints = points.map((point) => ({
-    point,
-    x: (point.longitude + 180) / 360,
-    y: mercatorY(point.latitude),
-  }));
-  const xExtent = d3.extent(rawPoints, (item) => item.x);
-  const yExtent = d3.extent(rawPoints, (item) => item.y);
-  const minX = xExtent[0] ?? 0;
-  const maxX = xExtent[1] ?? minX;
-  const minY = yExtent[0] ?? 0;
-  const maxY = yExtent[1] ?? minY;
-  const xSpread = maxX - minX;
-  const ySpread = maxY - minY;
-
-  return rawPoints.map(({ point, x, y }) => ({
-    ...point,
-    xPercent: xSpread === 0 ? 50 : 8 + ((x - minX) / xSpread) * 84,
-    yPercent: ySpread === 0 ? 50 : 8 + ((y - minY) / ySpread) * 84,
-  }));
 }
 
 function compareValues(a: unknown, b: unknown) {
@@ -399,30 +364,29 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
       return { latitude: 39.5, longitude: -98.35, zoom: 3 };
     }
 
-    const lat = d3.mean(validPoints, (point) => point.latitude) ?? 39.5;
-    const lon = d3.mean(validPoints, (point) => point.longitude) ?? -98.35;
+    if (validPoints.length === 1) {
+      const only = validPoints[0];
+      return { latitude: only.latitude, longitude: only.longitude, zoom: 6 };
+    }
+
     const latExtent = d3.extent(validPoints, (point) => point.latitude);
     const lonExtent = d3.extent(validPoints, (point) => point.longitude);
-    const latSpread = (latExtent[1] ?? lat) - (latExtent[0] ?? lat);
-    const lonSpread = (lonExtent[1] ?? lon) - (lonExtent[0] ?? lon);
-    const spread = Math.max(Math.abs(latSpread), Math.abs(lonSpread));
-    const zoom =
-      validPoints.length === 1 ? 7 : spread > 65 ? 2.3 : spread > 42 ? 2.8 : spread > 24 ? 3.4 : 4.4;
+    const minLat = latExtent[0] ?? 0;
+    const maxLat = latExtent[1] ?? 0;
+    const minLon = lonExtent[0] ?? 0;
+    const maxLon = lonExtent[1] ?? 0;
 
-    return { latitude: lat, longitude: lon, zoom };
+    return {
+      bounds: [
+        [minLon, minLat],
+        [maxLon, maxLat],
+      ] as [[number, number], [number, number]],
+      fitBoundsOptions: { padding: 56, maxZoom: 8 },
+    };
   }, [validPoints]);
 
   const selectedPoint =
     valuedPoints.find((point) => point.name === selectedPointName) ?? null;
-  const projectedPoints = useMemo(() => projectMapPoints(valuedPoints), [valuedPoints]);
-
-  function handleMapClick(event: MapLayerMouseEvent) {
-    const feature = event.features?.[0];
-    const name = feature?.properties?.name;
-    if (typeof name === "string") {
-      setSelectedPointName(name);
-    }
-  }
 
   return (
     <WidgetFrame title={widget.title} description={widget.description} className="artie-map-widget">
@@ -430,34 +394,38 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
         {valuedPoints.length ? (
           <>
             <div className="artie-map">
-              <div className="artie-map-overlay" aria-hidden="true">
-                <svg className="artie-map-overlay-base" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <path d="M10 72 C24 54 34 62 47 42 C58 25 72 34 90 16" />
-                  <path d="M8 20 H92 M8 40 H92 M8 60 H92 M8 80 H92" />
-                  <path d="M20 8 V92 M40 8 V92 M60 8 V92 M80 8 V92" />
-                  {projectedPoints.length > 1 ? (
-                    <polyline
-                      points={projectedPoints
-                        .map((point) => `${point.xPercent},${point.yPercent}`)
-                        .join(" ")}
-                    />
-                  ) : null}
-                </svg>
-              </div>
               <Map
                 initialViewState={initialViewState}
                 mapStyle={MAP_STYLE}
                 style={{ width: "100%", height: "100%" }}
                 attributionControl={false}
                 cooperativeGestures
-                interactiveLayerIds={[HEATMAP_POINT_LAYER_ID]}
-                onClick={handleMapClick}
               >
                 <NavigationControl position="top-right" showCompass={false} />
                 <Source id={HEATMAP_SOURCE_ID} type="geojson" data={geoJson}>
                   <Layer {...heatmapLayer} />
                   <Layer {...heatmapClickLayer} />
                 </Source>
+                {valuedPoints.map((point, index) => (
+                  <Marker
+                    key={`${point.name}-marker-${index}`}
+                    latitude={point.latitude}
+                    longitude={point.longitude}
+                    anchor="center"
+                    onClick={(event) => {
+                      event.originalEvent.stopPropagation();
+                      setSelectedPointName(point.name);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="artie-map-marker"
+                      aria-label={`Show ${point.name}`}
+                    >
+                      <span>{index + 1}</span>
+                    </button>
+                  </Marker>
+                ))}
                 {selectedPoint ? (
                   <Popup
                     latitude={selectedPoint.latitude}
@@ -466,7 +434,7 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                     closeButton
                     closeOnClick={false}
                     onClose={() => setSelectedPointName(null)}
-                    offset={28}
+                    offset={20}
                   >
                     <div className="artie-map-popup">
                       <strong>{selectedPoint.name}</strong>
@@ -476,23 +444,6 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                   </Popup>
                 ) : null}
               </Map>
-              <div className="artie-map-pin-layer">
-                {projectedPoints.map((point, index) => (
-                  <button
-                    key={`${point.name}-overlay-${index}`}
-                    type="button"
-                    className="artie-map-marker artie-map-marker-overlay"
-                    style={{
-                      left: `${point.xPercent}%`,
-                      top: `${point.yPercent}%`,
-                    }}
-                    aria-label={`Show ${point.name}`}
-                    onClick={() => setSelectedPointName(point.name)}
-                  >
-                    <span>{index + 1}</span>
-                  </button>
-                ))}
-              </div>
             </div>
             <ol className="artie-map-list" aria-label={`${widget.title ?? "Map"} locations`}>
               {valuedPoints.map((point, index) => (

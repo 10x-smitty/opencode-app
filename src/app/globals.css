@@ -1354,6 +1354,39 @@ button.secondary {
   box-shadow: var(--shadow);
 }
 
+.follow-up-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  width: min(896px, 100%);
+  justify-self: center;
+}
+
+.follow-up-chip {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.follow-up-chip:hover:not(:disabled) {
+  border-color: var(--muted);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.follow-up-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .composer textarea {
   min-height: 74px;
   max-height: 220px;

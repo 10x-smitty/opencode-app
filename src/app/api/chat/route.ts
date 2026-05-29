@@ -117,28 +117,29 @@ function buildAskArtiePrompt(content: string, chartmetricContext: string) {
     "- Only claim a metric, ranking, location, demographic, revenue figure, or connector result if it appears in the artist data context or the user's message.",
     "- Do not claim OAuth, live Spotify account, Instagram account, TikTok account, merch, email, ticketing, revenue, or other connector data unless present.",
     "- Do not promise that a pasted Chartmetric link or OAuth request will automatically connect live data from chat. Say the server data source must be configured, or ask the user to paste/export metrics.",
-    "- If data is unavailable or the selected artist has no connected data, say that plainly before recommending next steps.",
-    "- In `whatTheDataSays.summary`, identify the selected artist and data source when the context provides them.",
-    "- `whatTheDataSays.table` is required for every answer. Use a concise evidence table even when data is missing.",
-    "- The table must use plain values only; do not put Markdown table syntax inside the JSON.",
-    "- Label judgment calls as recommendations or assumptions.",
+    "- If data is unavailable or the selected artist has no connected data, say that plainly in `theAnswer` before recommending next steps.",
+    "- `theAnswer` is one prose paragraph. Name the artist and the primary market/city when the context allows it. No bullets, no headings.",
+    "- `why`, `whatIRecommend`, and `whatToExpect` are bullet arrays. Each bullet is an object with an `emoji` and a `text` field. Lead every bullet with a contextually appropriate emoji (🎯 📊 🌎 🏟️ 📈 ✅ 🗺️ 🇧🇷 etc).",
+    "- Label judgment calls as recommendations or assumptions inside the relevant bullet text.",
+    "- If confidence is low or data is missing, surface that in `whatToExpect` or in the optional `methodology` footer.",
+    "- `suggestions` is an array of 2-4 short follow-up questions the user would plausibly ask next, given this answer. Each suggestion must be under 8 words, end with `?`, and reference something concrete from this answer (a city, metric, market, etc.). Examples: 'How big is the Santiago audience?', 'What venue size in Buenos Aires?'. Do not repeat the user's original question.",
     "",
     "Optional data widgets:",
     "- Put optional widgets in the top-level `widgets` array, not as Markdown fences.",
-    "- Do not use a widget for the required `whatTheDataSays.table`; that table is rendered as a plain Markdown table by the app.",
+    "- Each widget MUST include a `placement` field set to one of: `answer`, `why`, `recommend`, `expect`. The widget renders inside that section.",
     "- Supported widget types are `table`, `map`, and `barChart` using the app-supported artie-widget payload shape.",
+    "- Whenever the answer references two or more cities, countries, or markets and you can provide latitude/longitude, include a `map` widget with `placement: \"why\"` so the evidence sits inside the Why section.",
+    "- If coordinates aren't available, include a `table` widget with `placement: \"why\"` instead and say coordinates were unavailable.",
     "- For maps, only include points when latitude and longitude are available in context or are common city coordinates you are confident about. Otherwise use a table.",
     "- For map widgets, include useful `value` and `label` fields because the UI shows clickable marker popups and a location list.",
+    "- Keep map widgets to the highest-priority 3-8 markets so the widget stays readable. Each point must include name, latitude, longitude, and a value or label that explains the observed signal.",
     "- For table widgets, keep rows concise and use stable column keys because the UI provides filtering and sorting.",
     wantsLocationAnswer
       ? [
           "",
           "Location-response requirement:",
-          "- This user is asking about locations, markets, routing, geography, touring, or audience geography.",
-          "- Include a `map` widget in `widgets` when you mention two or more cities/markets and can provide coordinates.",
-          "- If you cannot provide coordinates for a location, include a table widget instead and explain that coordinates were unavailable.",
-          "- Keep the map points limited to the highest-priority 3-8 markets so the widget stays readable.",
-          "- Each map point must include name, latitude, longitude, and value or label explaining the observed signal.",
+          "- This user is explicitly asking about locations, markets, routing, geography, touring, or audience geography.",
+          "- A `map` widget with `placement: \"why\"` is required (or a `table` widget with `placement: \"why\"` if coordinates are unavailable).",
         ].join("\n")
       : "",
     "",
@@ -169,38 +170,39 @@ function buildRepairPrompt(rawReply: string, validationError: unknown) {
 }
 
 function renderFallbackReply(validationError: unknown) {
+  const errorMessage =
+    validationError instanceof Error ? validationError.message : String(validationError);
+
   return renderAskArtieResponse({
-    whatTheDataSays: {
-      summary:
-        "Ask Artie could not validate the model response, so this answer is limited to the available context and should be treated as a formatting fallback.",
-      table: {
-        columns: ["Signal", "Value", "Source", "Implication"],
-        rows: [
-          [
-            "Validated response",
-            "Unavailable",
-            "Ask Artie response validator",
-            "The model response needs to be regenerated before using it for a decision.",
-          ],
-          [
-            "Validation issue",
-            validationError instanceof Error ? validationError.message : String(validationError),
-            "Server validation",
-            "No unsupported claims were rendered from the invalid model output.",
-          ],
-        ],
+    theAnswer:
+      "Ask Artie couldn't validate the model response, so no answer was rendered. Re-ask the question with the metric, city, platform, or decision you want prioritized and a fresh answer will be generated.",
+    why: [
+      {
+        emoji: "⚠️",
+        text: `The model response failed the Ask Artie schema check: ${errorMessage}`,
       },
-    },
-    whatIdDoNext: [
-      "Regenerate the answer or ask the question again with the key metric, city, platform, or decision you want prioritized.",
-      "Use the available Chartmetric or pasted data as the source of truth for the next response.",
+      {
+        emoji: "🛡️",
+        text: "No unsupported metrics or malformed widgets were rendered from the invalid output.",
+      },
     ],
-    whyThisMatters:
-      "A validated answer is required so the chat keeps the same sections, includes a data table, and does not render unsupported metrics or malformed widgets.",
-    readinessDataGaps: {
-      confidence: "Low",
-      notes: ["The model response failed the enforced Ask Artie schema."],
-    },
+    whatIRecommend: [
+      {
+        emoji: "🔁",
+        text: "Re-run the question, ideally with the key metric, market, or platform you want prioritized.",
+      },
+      {
+        emoji: "📎",
+        text: "Use the available Chartmetric data or paste the metrics you want analyzed as the source of truth.",
+      },
+    ],
+    whatToExpect: [
+      {
+        emoji: "🎯",
+        text: "A re-asked question typically produces a valid structured answer; persistent failures usually indicate missing connector data.",
+      },
+    ],
+    methodology: "Fallback rendered by the Ask Artie response validator.",
   });
 }
 

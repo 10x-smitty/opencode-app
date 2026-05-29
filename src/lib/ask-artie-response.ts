@@ -1,58 +1,61 @@
-type Confidence = "High" | "Medium" | "Low";
-
-type DataTable = {
-  columns: string[];
-  rows: string[][];
-};
+type WidgetPlacement = "answer" | "why" | "recommend" | "expect";
 
 type ResponseWidget = {
   type: "table" | "map" | "barChart";
+  placement?: WidgetPlacement;
   [key: string]: unknown;
 };
 
-export type AskArtieResponse = {
-  whatTheDataSays: {
-    summary: string;
-    table: DataTable;
-  };
-  whatIdDoNext: string[];
-  whyThisMatters: string;
-  readinessDataGaps: {
-    confidence: Confidence;
-    notes: string[];
-  };
-  widgets?: ResponseWidget[];
+type Bullet = {
+  emoji?: string;
+  text: string;
 };
 
-const CONFIDENCE_VALUES = new Set<Confidence>(["High", "Medium", "Low"]);
+export type AskArtieResponse = {
+  theAnswer: string;
+  why: Bullet[];
+  whatIRecommend: Bullet[];
+  whatToExpect: Bullet[];
+  methodology?: string;
+  widgets?: ResponseWidget[];
+  suggestions?: string[];
+};
+
+const WIDGET_PLACEMENTS = new Set<WidgetPlacement>([
+  "answer",
+  "why",
+  "recommend",
+  "expect",
+]);
 
 export const ASK_ARTIE_RESPONSE_JSON_SCHEMA = `{
-  "whatTheDataSays": {
-    "summary": "One short paragraph naming the selected artist and data source when available.",
-    "table": {
-      "columns": ["Signal", "Value", "Source", "Implication"],
-      "rows": [
-        ["Observed metric or constraint", "Exact value or unavailable", "Context source", "Decision implication"]
-      ]
-    }
-  },
-  "whatIdDoNext": [
-    "First concrete action",
-    "Second concrete action",
-    "Third concrete action"
+  "theAnswer": "One short paragraph that states the recommendation directly. Name the artist and the primary city/market when relevant. No bullets — prose only.",
+  "why": [
+    { "emoji": "🎯", "text": "Lead evidence point with the strongest signal or number." },
+    { "emoji": "📊", "text": "Second supporting data point." },
+    { "emoji": "🌎", "text": "Third supporting point — context, region, or history." }
   ],
-  "whyThisMatters": "One short paragraph tying the recommendation to audience focus, conversion, release performance, touring, merch, or fan activation.",
-  "readinessDataGaps": {
-    "confidence": "High | Medium | Low",
-    "notes": [
-      "Missing data, unavailable connector, or assumption that affects the recommendation"
-    ]
-  },
+  "whatIRecommend": [
+    { "emoji": "✅", "text": "Primary concrete action." },
+    { "emoji": "🗺️", "text": "Second concrete action." },
+    { "emoji": "🎯", "text": "Third concrete action." }
+  ],
+  "whatToExpect": [
+    { "emoji": "📈", "text": "Expected outcome or performance signal." },
+    { "emoji": "🎯", "text": "Risk, caveat, or follow-on decision to watch." }
+  ],
+  "methodology": "Optional one-sentence note on how the recommendation was measured. Renders as a small footer.",
   "widgets": [
     {
       "type": "map | barChart | table",
-      "...": "Optional widget payload using the app-supported artie-widget schema"
+      "placement": "answer | why | recommend | expect",
+      "...": "Widget payload using the app-supported artie-widget schema. The placement field controls which section the widget renders inside."
     }
+  ],
+  "suggestions": [
+    "Short follow-up question the user might ask next (under 8 words).",
+    "Second follow-up question, distinct from the first.",
+    "Third follow-up question, optional."
   ]
 }`;
 
@@ -66,39 +69,45 @@ function asString(value: unknown) {
   return "";
 }
 
-function normalizeStringArray(value: unknown) {
+function normalizeBullets(value: unknown): Bullet[] {
   if (!Array.isArray(value)) return [];
-  return value.map(asString).filter(Boolean);
-}
-
-function normalizeTable(value: unknown): DataTable | null {
-  if (!isRecord(value) || !Array.isArray(value.columns) || !Array.isArray(value.rows)) {
-    return null;
-  }
-
-  const columns = value.columns.map(asString).filter(Boolean);
-  const rows = value.rows
-    .filter(Array.isArray)
-    .map((row) => (row as unknown[]).map(asString));
-
-  if (!columns.length || !rows.length) return null;
-
-  return {
-    columns,
-    rows: rows.map((row) => columns.map((_, index) => row[index] || "Not available")),
-  };
+  return value
+    .map((item): Bullet | null => {
+      if (typeof item === "string") {
+        const text = item.trim();
+        return text ? { text } : null;
+      }
+      if (!isRecord(item)) return null;
+      const text = asString(item.text ?? item.point ?? item.description ?? item.value);
+      if (!text) return null;
+      const emoji = asString(item.emoji ?? item.icon);
+      return emoji ? { emoji, text } : { text };
+    })
+    .filter((b): b is Bullet => Boolean(b));
 }
 
 function normalizeWidgets(value: unknown): ResponseWidget[] {
   if (!Array.isArray(value)) return [];
 
-  return value.filter((widget): widget is ResponseWidget => {
-    if (!isRecord(widget)) return false;
-    if (widget.type === "table") return Array.isArray(widget.rows);
-    if (widget.type === "map") return Array.isArray(widget.points);
-    if (widget.type === "barChart") return Array.isArray(widget.data);
-    return false;
-  });
+  return value
+    .map((widget): ResponseWidget | null => {
+      if (!isRecord(widget)) return null;
+
+      const placementRaw = asString(widget.placement) as WidgetPlacement;
+      const placement = WIDGET_PLACEMENTS.has(placementRaw) ? placementRaw : "why";
+
+      if (widget.type === "table" && Array.isArray(widget.rows)) {
+        return { ...widget, type: "table", placement } as ResponseWidget;
+      }
+      if (widget.type === "map" && Array.isArray(widget.points)) {
+        return { ...widget, type: "map", placement } as ResponseWidget;
+      }
+      if (widget.type === "barChart" && Array.isArray(widget.data)) {
+        return { ...widget, type: "barChart", placement } as ResponseWidget;
+      }
+      return null;
+    })
+    .filter((w): w is ResponseWidget => Boolean(w));
 }
 
 export function parseAskArtieResponse(raw: string): AskArtieResponse {
@@ -106,83 +115,85 @@ export function parseAskArtieResponse(raw: string): AskArtieResponse {
   const parsed = JSON.parse(json) as unknown;
   if (!isRecord(parsed)) throw new Error("Response must be a JSON object");
 
-  const whatTheDataSays = parsed.whatTheDataSays;
-  if (!isRecord(whatTheDataSays)) throw new Error("Missing whatTheDataSays object");
+  const theAnswer = asString(parsed.theAnswer);
+  if (!theAnswer) throw new Error("Missing theAnswer paragraph");
 
-  const summary = asString(whatTheDataSays.summary);
-  const table = normalizeTable(whatTheDataSays.table);
-  if (!summary) throw new Error("Missing whatTheDataSays.summary");
-  if (!table) throw new Error("whatTheDataSays.table must include columns and at least one row");
+  const why = normalizeBullets(parsed.why);
+  if (!why.length) throw new Error("Missing why bullets");
 
-  const whatIdDoNext = normalizeStringArray(parsed.whatIdDoNext);
-  if (!whatIdDoNext.length) throw new Error("Missing whatIdDoNext actions");
+  const whatIRecommend = normalizeBullets(parsed.whatIRecommend);
+  if (!whatIRecommend.length) throw new Error("Missing whatIRecommend bullets");
 
-  const whyThisMatters = asString(parsed.whyThisMatters);
-  if (!whyThisMatters) throw new Error("Missing whyThisMatters");
+  const whatToExpect = normalizeBullets(parsed.whatToExpect);
+  if (!whatToExpect.length) throw new Error("Missing whatToExpect bullets");
 
-  const readinessDataGaps = parsed.readinessDataGaps;
-  if (!isRecord(readinessDataGaps)) throw new Error("Missing readinessDataGaps object");
-
-  const confidence = asString(readinessDataGaps.confidence) as Confidence;
-  if (!CONFIDENCE_VALUES.has(confidence)) {
-    throw new Error("readinessDataGaps.confidence must be High, Medium, or Low");
-  }
-
-  const notes = normalizeStringArray(readinessDataGaps.notes);
-  if (!notes.length) throw new Error("Missing readinessDataGaps.notes");
+  const methodology = asString(parsed.methodology);
+  const suggestions = normalizeStringArray(parsed.suggestions).slice(0, 4);
 
   return {
-    whatTheDataSays: {
-      summary,
-      table,
-    },
-    whatIdDoNext,
-    whyThisMatters,
-    readinessDataGaps: {
-      confidence,
-      notes,
-    },
+    theAnswer,
+    why,
+    whatIRecommend,
+    whatToExpect,
+    methodology: methodology || undefined,
     widgets: normalizeWidgets(parsed.widgets),
+    suggestions: suggestions.length ? suggestions : undefined,
   };
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => asString(item))
+    .filter((item): item is string => Boolean(item));
+}
+
 export function renderAskArtieResponse(response: AskArtieResponse) {
-  return [
-    "## What the data says",
-    "",
-    response.whatTheDataSays.summary,
-    "",
-    renderMarkdownTable(response.whatTheDataSays.table),
-    "",
-    "## What I'd do next",
-    "",
-    response.whatIdDoNext.map((action) => `- ${action}`).join("\n"),
-    "",
-    "## Why this matters",
-    "",
-    response.whyThisMatters,
-    "",
-    "## Readiness / Data Gaps",
-    "",
-    `Confidence: ${response.readinessDataGaps.confidence}`,
-    "",
-    response.readinessDataGaps.notes.map((note) => `- ${note}`).join("\n"),
-    "",
-    ...(response.widgets?.flatMap((widget) => ["```artie-widget", JSON.stringify(widget), "```", ""]) ?? []),
-  ]
-    .join("\n")
-    .trim();
-}
+  const widgetsByPlacement = (placement: WidgetPlacement) =>
+    (response.widgets ?? []).filter((widget) => (widget.placement ?? "why") === placement);
 
-function renderMarkdownTable(table: DataTable) {
-  const header = `| ${table.columns.map(escapeMarkdownCell).join(" | ")} |`;
-  const divider = `| ${table.columns.map(() => "---").join(" | ")} |`;
-  const rows = table.rows.map((row) => `| ${row.map(escapeMarkdownCell).join(" | ")} |`);
-  return [header, divider, ...rows].join("\n");
-}
+  const renderBullets = (items: Bullet[]) =>
+    items.map((b) => `- ${b.emoji ? `${b.emoji} ` : ""}${b.text}`).join("\n");
 
-function escapeMarkdownCell(value: string) {
-  return value.replace(/\|/g, "\\|").replace(/\n+/g, " ").trim() || "Not available";
+  const renderWidgets = (placement: WidgetPlacement) =>
+    widgetsByPlacement(placement).flatMap((widget) => [
+      "",
+      "```artie-widget",
+      JSON.stringify(widget),
+      "```",
+    ]);
+
+  const lines: string[] = [
+    "## 📍 The Answer",
+    "",
+    response.theAnswer,
+    ...renderWidgets("answer"),
+    "",
+    "## 🔍 Why",
+    "",
+    renderBullets(response.why),
+    ...renderWidgets("why"),
+    "",
+    "## ✅ What I Recommend",
+    "",
+    renderBullets(response.whatIRecommend),
+    ...renderWidgets("recommend"),
+    "",
+    "## 🔮 What to Expect",
+    "",
+    renderBullets(response.whatToExpect),
+    ...renderWidgets("expect"),
+  ];
+
+  if (response.methodology) {
+    lines.push("", "---", "", `_${response.methodology}_`);
+  }
+
+  if (response.suggestions?.length) {
+    lines.push("", "```artie-suggestions", JSON.stringify(response.suggestions), "```");
+  }
+
+  return lines.join("\n").trim();
 }
 
 function extractJson(raw: string) {

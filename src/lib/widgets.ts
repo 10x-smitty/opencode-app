@@ -91,6 +91,11 @@ export function splitMessageWidgets(content: string): MessageSegment[] {
       });
     }
 
+    if (language === "artie-suggestions") {
+      cursor = index + fullMatch.length;
+      continue;
+    }
+
     try {
       if (!canContainWidget) throw new Error("Not a widget fence");
       const parsed = JSON.parse(json) as unknown;
@@ -120,4 +125,25 @@ export function splitMessageWidgets(content: string): MessageSegment[] {
   }
 
   return segments.filter((segment) => segment.type === "widget" || segment.content.trim());
+}
+
+const SUGGESTIONS_RE = /```artie-suggestions\s*([\s\S]*?)```/g;
+
+export function extractSuggestions(content: string): string[] {
+  const result: string[] = [];
+  for (const match of content.matchAll(SUGGESTIONS_RE)) {
+    try {
+      const parsed = JSON.parse(match[1]) as unknown;
+      if (!Array.isArray(parsed)) continue;
+      for (const item of parsed) {
+        if (typeof item === "string") {
+          const trimmed = item.trim();
+          if (trimmed) result.push(trimmed);
+        }
+      }
+    } catch {
+      /* ignore invalid suggestions block */
+    }
+  }
+  return result;
 }
