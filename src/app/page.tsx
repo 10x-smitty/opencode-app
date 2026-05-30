@@ -5,7 +5,6 @@ import { createClient, Session } from "@supabase/supabase-js";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Archive,
   ArrowUp,
   LayoutDashboard,
   MapPin,
@@ -15,6 +14,7 @@ import {
   Settings,
   Square,
   SquarePen,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -486,6 +486,63 @@ export default function Home() {
     setArtistSearchResults([]);
   }
 
+  function sortChatSessions(list: ChatSession[]) {
+    return [...list].sort((a, b) => {
+      const aArchived = a.archived_at ? 1 : 0;
+      const bArchived = b.archived_at ? 1 : 0;
+      if (aArchived !== bArchived) return aArchived - bArchived;
+      const aPinned = a.pinned_at ? 0 : 1;
+      const bPinned = b.pinned_at ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+      if (a.pinned_at && b.pinned_at) {
+        return new Date(b.pinned_at).getTime() - new Date(a.pinned_at).getTime();
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }
+
+  async function patchChatSession(
+    chatSession: ChatSession,
+    patch: { pinned?: boolean; archived?: boolean },
+  ) {
+    if (!authHeaders) return;
+
+    const previous = chatSessions;
+    const optimistic: ChatSession = {
+      ...chatSession,
+      ...(patch.pinned !== undefined
+        ? { pinned_at: patch.pinned ? new Date().toISOString() : null }
+        : {}),
+      ...(patch.archived !== undefined
+        ? {
+            archived_at: patch.archived ? new Date().toISOString() : null,
+            ...(patch.archived ? { pinned_at: null } : {}),
+          }
+        : {}),
+    };
+    setChatSessions((current) =>
+      sortChatSessions(current.map((item) => (item.id === chatSession.id ? optimistic : item))),
+    );
+
+    try {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(chatSession.id)}`, {
+        method: "PATCH",
+        headers: { ...authHeaders, "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = (await response.json()) as { session?: ChatSession; error?: string };
+      if (!response.ok || !data.session) throw new Error(data.error ?? "Could not update chat");
+      setChatSessions((current) =>
+        sortChatSessions(
+          current.map((item) => (item.id === chatSession.id ? { ...item, ...data.session! } : item)),
+        ),
+      );
+    } catch (error) {
+      setChatSessions(previous);
+      setStatus(error instanceof Error ? error.message : "Could not update chat");
+    }
+  }
+
   async function deleteChatSession(chatSession: ChatSession) {
     if (!authHeaders || deletingSessionId) return;
 
@@ -621,7 +678,7 @@ export default function Home() {
         <section className="auth-panel">
           <div>
             <div className="brand-row">
-              <img src="/ask-artie-logo.png" alt="Ask Artie" width={180} />
+              <img src="/ask-artie-logo.svg" alt="Ask Artie" width={260} />
             </div>
             <h1>Plan your next artist move with Ask Artie.</h1>
             <p className="subtle">
@@ -680,7 +737,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-row">
-            <img src="/ask-artie-logo.png" alt="Ask Artie" width={100} />
+            <img src="/ask-artie-logo.svg" alt="Ask Artie" width={150} />
           </div>
         </div>
 
@@ -700,47 +757,63 @@ export default function Home() {
             {chatSessions.length === 0 ? (
               <div className="thread-empty">No chats yet</div>
             ) : (
-              chatSessions.map((chatSession) => (
-                <div
-                  key={chatSession.id}
-                  className={`thread-item ${chatSession.id === activeSessionId ? "active" : ""}`}
-                >
-                  <button
-                    className="thread-select"
-                    type="button"
-                    onClick={() => {
-                      setActiveSessionId(chatSession.id);
-                      if (chatSession.artist_id && chatSession.artist_id !== selectedArtistId) {
-                        setSelectedArtistId(chatSession.artist_id);
-                      }
-                    }}
+              chatSessions.map((chatSession) => {
+                const isPinned = Boolean(chatSession.pinned_at);
+                const isDeleting = deletingSessionId === chatSession.id;
+                return (
+                  <div
+                    key={chatSession.id}
+                    className={`thread-item ${chatSession.id === activeSessionId ? "active" : ""} ${
+                      isPinned ? "thread-item--pinned" : ""
+                    }`}
                   >
-                    <span className="thread-title">{chatSession.title}</span>
-                    {chatSession.artist_name ? (
-                      <span className="thread-subtitle">{chatSession.artist_name}</span>
-                    ) : null}
-                  </button>
-                  <span className="thread-time" aria-label="Last updated">
-                    {formatRelativeTime(chatSession.created_at)}
-                  </span>
-                  <div className="thread-actions" aria-label={`Actions for ${chatSession.title}`}>
                     <button
+                      className="thread-select"
                       type="button"
-                      className="thread-action"
-                      aria-label={`Pin ${chatSession.title}`}
+                      onClick={() => {
+                        setActiveSessionId(chatSession.id);
+                        if (
+                          chatSession.artist_id &&
+                          chatSession.artist_id !== selectedArtistId
+                        ) {
+                          setSelectedArtistId(chatSession.artist_id);
+                        }
+                      }}
                     >
-                      <Pin size={12} />
+                      <span className="thread-title">{chatSession.title}</span>
+                      {chatSession.artist_name ? (
+                        <span className="thread-subtitle">{chatSession.artist_name}</span>
+                      ) : null}
                     </button>
-                    <button
-                      type="button"
-                      className="thread-action"
-                      aria-label={`Archive ${chatSession.title}`}
+                    <span className="thread-time" aria-label="Last updated">
+                      {formatRelativeTime(chatSession.created_at)}
+                    </span>
+                    <div
+                      className="thread-actions"
+                      aria-label={`Actions for ${chatSession.title}`}
                     >
-                      <Archive size={12} />
-                    </button>
+                      <button
+                        type="button"
+                        className={`thread-action ${isPinned ? "is-active" : ""}`}
+                        aria-label={`${isPinned ? "Unpin" : "Pin"} ${chatSession.title}`}
+                        aria-pressed={isPinned}
+                        onClick={() => patchChatSession(chatSession, { pinned: !isPinned })}
+                      >
+                        <Pin size={12} fill={isPinned ? "currentColor" : "none"} />
+                      </button>
+                      <button
+                        type="button"
+                        className="thread-action thread-action--danger"
+                        aria-label={`Delete ${chatSession.title}`}
+                        disabled={isDeleting}
+                        onClick={() => deleteChatSession(chatSession)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </section>
         </div>

@@ -7,10 +7,14 @@ export async function GET(request: Request) {
     const user = await requireUser(request);
     const pool = getPool();
     const { rows } = await pool.query(
-      `select id, title, artist_id, artist_name, created_at
+      `select id, title, artist_id, artist_name, created_at, pinned_at, archived_at
        from chat_sessions
        where user_id = $1
-       order by created_at desc`,
+       order by
+         (archived_at is not null) asc,
+         (pinned_at is null) asc,
+         pinned_at desc,
+         created_at desc`,
       [user.id],
     );
 

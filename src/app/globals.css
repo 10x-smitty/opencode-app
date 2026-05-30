@@ -429,6 +429,31 @@ button.secondary {
   color: var(--text);
 }
 
+.thread-action.is-active {
+  color: var(--text);
+}
+
+.thread-item--pinned .thread-time {
+  display: none;
+}
+
+.thread-item--pinned .thread-actions {
+  display: flex;
+}
+
+.thread-item--pinned:not(:hover) .thread-action--danger {
+  display: none;
+}
+
+.thread-action--danger:hover {
+  color: var(--danger);
+}
+
+.thread-action[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .thread-empty {
   padding: 10px 12px;
   color: var(--app-muted);

@@ -14,6 +14,8 @@ export type ChatSession = {
   artist_id?: string | null;
   artist_name?: string | null;
   created_at: string;
+  pinned_at?: string | null;
+  archived_at?: string | null;
 };
 
 export type ArtistOption = {
