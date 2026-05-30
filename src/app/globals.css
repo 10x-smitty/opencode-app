@@ -236,7 +236,7 @@ button.secondary {
 .chat-shell {
   display: grid;
   grid-template-columns: 282px minmax(0, 1fr);
-  background: var(--app-sidebar);
+  background: var(--surface);
 }
 
 .chat-shell--collapsed {
@@ -260,13 +260,17 @@ button.secondary {
   grid-template-rows: 57px minmax(0, 1fr) auto;
   min-width: 0;
   height: 100vh;
-  border-right: 1px solid rgb(99, 99, 99);
+  border-right: 1px solid rgba(52, 52, 52, 1);
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
   padding: 0 16px;
+}
+
+.sidebar-header .brand-row img {
+  margin-top: 8px;
 }
 
 .sidebar-main {
@@ -364,6 +368,19 @@ button.secondary {
   white-space: nowrap;
 }
 
+.thread-subtitle {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  margin-top: 4px;
+  padding-right: 6px;
+  color: #999999;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .thread-time,
 .thread-actions {
   min-width: 36px;
@@ -421,7 +438,7 @@ button.secondary {
 .sidebar-footer {
   display: grid;
   padding: 12px;
-  border-top: 1px solid rgb(87 87 87);
+  border-top: 1px solid rgba(52, 52, 52, 1);
 }
 
 .user-menu {
@@ -545,7 +562,6 @@ button.secondary {
   color: var(--app-muted);
   font-weight: 500;
 }
-
 
 .chat-subtitle {
   overflow: hidden;
@@ -911,13 +927,10 @@ button.secondary {
   height: 28px;
 }
 
-.menu-caret {
-  width: 7px;
-  height: 7px;
-  border-right: 1px solid var(--app-muted);
-  border-bottom: 1px solid var(--app-muted);
-  transform: translateY(-2px) rotate(45deg);
+.menu-settings {
+  color: var(--app-muted);
 }
+
 
 .messages {
   display: flex;
@@ -925,7 +938,15 @@ button.secondary {
   flex-direction: column;
   gap: 28px;
   overflow-y: auto;
-  padding: 44px max(24px, calc((100vw - 282px - 896px) / 2)) 24px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  width: min(896px, 100%);
+  justify-self: center;
+  padding: 44px 24px 24px;
+}
+
+.messages::-webkit-scrollbar {
+  display: none;
 }
 
 .empty-state {
@@ -1524,7 +1545,9 @@ button.secondary {
 .composer-shell {
   display: grid;
   gap: 10px;
-  padding: 14px max(24px, calc((100vw - 282px - 896px) / 2)) 18px;
+  width: min(896px, 100%);
+  justify-self: center;
+  padding: 14px 24px 18px;
 }
 
 .composer {
@@ -1691,7 +1714,7 @@ button.secondary {
   min-width: 0;
   height: 100vh;
   border-left: 1px solid var(--border-soft);
-  background: var(--app-sidebar);
+  background: rgba(21, 21, 21, 1);
   overflow: hidden;
 }
 
@@ -1851,6 +1874,21 @@ button.secondary {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.artist-profile-bio p {
+  margin: 0 0 8px;
+}
+
+.artist-profile-bio p:last-child {
+  margin-bottom: 0;
+}
+
+.artist-profile-bio a {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 .artist-profile-bio.is-loading,
@@ -1858,6 +1896,7 @@ button.secondary {
   color: var(--app-muted);
   font-style: italic;
 }
+
 
 .artist-profile-meta {
   display: inline-flex;

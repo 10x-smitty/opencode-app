@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { consumeArtistSearchResult } from "@/lib/artist-search-cache";
 import { getPool } from "@/lib/db";
+import { fetchChartmetricArtistProfile } from "@/lib/chartmetric";
+import { summarizeArtistBio } from "@/lib/bio-summary";
 
 type AddArtistRequest = {
   token?: string;
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
            monthly_listeners = excluded.monthly_listeners,
            career_stage = excluded.career_stage,
            social_handle = excluded.social_handle
-       returning chartmetric_artist_id, name, image_url, genres, social_handle`,
+       returning chartmetric_artist_id, name, image_url, genres, social_handle, bio`,
       [
         user.id,
         artist.id,
@@ -89,7 +91,26 @@ export async function POST(request: Request) {
       ],
     );
 
-    return NextResponse.json({ artist: rowToArtist(result.rows[0]) });
+    const row = result.rows[0];
+    if (!row.bio) {
+      try {
+        const profile = await fetchChartmetricArtistProfile(artist.id);
+        const summary = await summarizeArtistBio(artist.name, profile.bio);
+        if (summary) {
+          await pool.query(
+            `update user_artists set bio = $1 where user_id = $2 and chartmetric_artist_id = $3`,
+            [summary, user.id, artist.id],
+          );
+        }
+      } catch (error) {
+        console.warn("[artists] bio summarization skipped", {
+          artistId: artist.id,
+          error,
+        });
+      }
+    }
+
+    return NextResponse.json({ artist: rowToArtist(row) });
   } catch (error) {
     if (error instanceof Response) return error;
     console.error(error);

@@ -12,6 +12,7 @@ import {
   PanelLeft,
   Pin,
   Plug,
+  Settings,
   Square,
   SquarePen,
   X,
@@ -122,6 +123,16 @@ function ArtistAvatar({
     );
   }
   return <span className={classes}>{getInitials(name)}</span>;
+}
+
+function sanitizeBioHtml(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/javascript:/gi, "");
 }
 
 function getInitials(value?: string | null) {
@@ -610,8 +621,7 @@ export default function Home() {
         <section className="auth-panel">
           <div>
             <div className="brand-row">
-              <span className="brand-mark">AA</span>
-              <span>Ask Artie</span>
+              <img src="/ask-artie-logo.png" alt="Ask Artie" width={180} />
             </div>
             <h1>Plan your next artist move with Ask Artie.</h1>
             <p className="subtle">
@@ -670,8 +680,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-row">
-            <span className="brand-mark">AA</span>
-            <span>Ask Artie</span>
+            <img src="/ask-artie-logo.png" alt="Ask Artie" width={100} />
           </div>
         </div>
 
@@ -699,9 +708,17 @@ export default function Home() {
                   <button
                     className="thread-select"
                     type="button"
-                    onClick={() => setActiveSessionId(chatSession.id)}
+                    onClick={() => {
+                      setActiveSessionId(chatSession.id);
+                      if (chatSession.artist_id && chatSession.artist_id !== selectedArtistId) {
+                        setSelectedArtistId(chatSession.artist_id);
+                      }
+                    }}
                   >
                     <span className="thread-title">{chatSession.title}</span>
+                    {chatSession.artist_name ? (
+                      <span className="thread-subtitle">{chatSession.artist_name}</span>
+                    ) : null}
                   </button>
                   <span className="thread-time" aria-label="Last updated">
                     {formatRelativeTime(chatSession.created_at)}
@@ -731,9 +748,11 @@ export default function Home() {
         <div className="sidebar-footer">
           <details className="user-menu">
             <summary>
-              <span className="avatar-badge">{getInitials(session.user.email)}</span>
+              <span className="avatar-badge avatar-badge--image" aria-hidden="true">
+                <img src="/avatar.svg" alt="" />
+              </span>
               <span>{session.user.email}</span>
-              <span className="menu-caret" aria-hidden="true" />
+              <Settings size={14} className="menu-settings" aria-hidden="true" />
             </summary>
             <div className="user-menu-popover">
               <button type="button" onClick={() => supabase.auth.signOut()}>
@@ -1120,7 +1139,12 @@ export default function Home() {
                 {isLoadingProfile && !artistProfile ? (
                   <p className="artist-profile-bio is-loading">Loading bio…</p>
                 ) : artistProfile?.bio ? (
-                  <p className="artist-profile-bio">{artistProfile.bio}</p>
+                  <div
+                    className="artist-profile-bio"
+                    dangerouslySetInnerHTML={{
+                      __html: sanitizeBioHtml(artistProfile.bio),
+                    }}
+                  />
                 ) : (
                   <p className="artist-profile-bio is-empty">No bio available.</p>
                 )}
