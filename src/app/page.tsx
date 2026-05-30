@@ -4,10 +4,34 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient, Session } from "@supabase/supabase-js";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  Archive,
+  ArrowUp,
+  LayoutDashboard,
+  MapPin,
+  PanelLeft,
+  Pin,
+  Plug,
+  Square,
+  SquarePen,
+  X,
+} from "lucide-react";
+import {
+  SiInstagram,
+  SiSpotify,
+  SiTiktok,
+  SiYoutube,
+} from "@icons-pack/react-simple-icons";
 import { ResponseWidget } from "@/components/ResponseWidgets";
 import { markdownComponents } from "@/components/MarkdownComponents";
 import { extractSuggestions, splitMessageWidgets } from "@/lib/widgets";
-import type { ArtistOption, ArtistSearchResult, ChatMessage, ChatSession } from "@/types/chat";
+import type {
+  ArtistOption,
+  ArtistProfile,
+  ArtistSearchResult,
+  ChatMessage,
+  ChatSession,
+} from "@/types/chat";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -23,12 +47,82 @@ const supabaseConfig = {
 
 const ADD_ARTIST_VALUE = "__add_artist__";
 
+type DataSourceOption = {
+  key: string;
+  label: string;
+  connected: boolean;
+};
+
+const DATA_SOURCES: DataSourceOption[] = [
+  { key: "spotify", label: "Spotify for Artists", connected: false },
+  { key: "instagram", label: "Instagram", connected: false },
+  { key: "tiktok", label: "TikTok", connected: false },
+  { key: "youtube", label: "YouTube", connected: false },
+];
+
 const STARTER_QUESTIONS = [
   "Where should I tour?",
   "What content works best?",
   "Who are my influential fans?",
   "Playlist activity",
 ];
+
+function formatBreadcrumbDate(iso?: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yy = String(date.getFullYear() % 100).padStart(2, "0");
+  return `${mm}-${dd}-${yy}`;
+}
+
+function formatRelativeTime(iso?: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+  if (years >= 1) return `${years}y`;
+  if (months >= 1) return `${months}mo`;
+  if (weeks >= 1) return `${weeks}w`;
+  if (days >= 1) return `${days}d`;
+  if (hours >= 1) return `${hours}h`;
+  if (minutes >= 1) return `${minutes}m`;
+  return "now";
+}
+
+function formatStatNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
+}
+
+function ArtistAvatar({
+  name,
+  imageUrl,
+  className,
+}: {
+  name?: string | null;
+  imageUrl?: string | null;
+  className?: string;
+}) {
+  const classes = ["avatar-badge", className].filter(Boolean).join(" ");
+  if (imageUrl) {
+    return (
+      <span className={`${classes} avatar-badge--image`}>
+        <img src={imageUrl} alt="" />
+      </span>
+    );
+  }
+  return <span className={classes}>{getInitials(name)}</span>;
+}
 
 function getInitials(value?: string | null) {
   const parts = (value ?? "")
@@ -92,6 +186,11 @@ export default function Home() {
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
+  const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
+  const [profileError, setProfileError] = useState("");
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId);
   const activeChatSession = chatSessions.find((item) => item.id === activeSessionId);
   const followUpSuggestions = useMemo(() => {
@@ -99,7 +198,7 @@ export default function Home() {
       const message = messages[i];
       if (message.role !== "assistant") continue;
       const found = extractSuggestions(message.content);
-      if (found.length) return found.slice(0, 4);
+      if (found.length) return found.slice(0, 3);
       return [];
     }
     return [];
@@ -169,6 +268,43 @@ export default function Home() {
       })
       .catch((error: Error) => setStatus(error.message));
   }, [authHeaders]);
+
+  useEffect(() => {
+    setArtistProfile(null);
+    setProfileError("");
+
+    if (!authHeaders || !selectedArtistId) {
+      setIsLoadingProfile(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingProfile(true);
+
+    fetch(`/api/artists/${encodeURIComponent(selectedArtistId)}/profile`, {
+      headers: authHeaders,
+    })
+      .then(async (response) => {
+        const data = (await response.json()) as { profile?: ArtistProfile; error?: string };
+        if (!response.ok || !data.profile) {
+          throw new Error(data.error ?? "Could not load artist profile");
+        }
+        return data.profile;
+      })
+      .then((profile) => {
+        if (!cancelled) setArtistProfile(profile);
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setProfileError(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authHeaders, selectedArtistId]);
 
   useEffect(() => {
     if (!session?.access_token || !activeSessionId) {
@@ -526,7 +662,11 @@ export default function Home() {
   }
 
   return (
-    <main className="chat-shell">
+    <main
+      className={`chat-shell ${isSidebarOpen ? "" : "chat-shell--collapsed"} ${
+        isProfilePanelOpen ? "chat-shell--has-profile" : ""
+      }`}
+    >
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-row">
@@ -542,7 +682,8 @@ export default function Home() {
             onClick={() => startNewChat()}
             disabled={isSending}
           >
-            New chat
+            <SquarePen size={16} aria-hidden="true" />
+            <span>New chat</span>
           </button>
 
           <section className="sidebar-section">
@@ -561,26 +702,26 @@ export default function Home() {
                     onClick={() => setActiveSessionId(chatSession.id)}
                   >
                     <span className="thread-title">{chatSession.title}</span>
-                    {chatSession.artist_name ? (
-                      <span className="thread-artist-tag">{chatSession.artist_name}</span>
-                    ) : null}
-                    <span className="thread-meta">
-                      {chatSession.id === activeSessionId
-                        ? messages.length
-                          ? `${messages.length} messages`
-                          : "No messages yet"
-                        : new Date(chatSession.created_at).toLocaleDateString()}
-                    </span>
                   </button>
-                  <button
-                    className="thread-delete"
-                    type="button"
-                    aria-label={`Delete ${chatSession.title}`}
-                    disabled={deletingSessionId === chatSession.id}
-                    onClick={() => deleteChatSession(chatSession)}
-                  >
-                    x
-                  </button>
+                  <span className="thread-time" aria-label="Last updated">
+                    {formatRelativeTime(chatSession.created_at)}
+                  </span>
+                  <div className="thread-actions" aria-label={`Actions for ${chatSession.title}`}>
+                    <button
+                      type="button"
+                      className="thread-action"
+                      aria-label={`Pin ${chatSession.title}`}
+                    >
+                      <Pin size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="thread-action"
+                      aria-label={`Archive ${chatSession.title}`}
+                    >
+                      <Archive size={12} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -605,10 +746,45 @@ export default function Home() {
 
       <section className="chat-panel">
         <header className="chat-header">
-          <div>
-            <h1>Chat</h1>
-            {activeChatSession ? <p className="chat-subtitle">{activeChatSession.title}</p> : null}
-          </div>
+          <button
+            type="button"
+            className="icon-button chat-header-toggle"
+            aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-pressed={isSidebarOpen}
+            onClick={() => setIsSidebarOpen((open) => !open)}
+          >
+            <PanelLeft size={18} />
+          </button>
+          <nav className="chat-breadcrumb" aria-label="Chat location">
+            {activeChatSession ? (
+              <>
+                <span className="chat-breadcrumb-item">
+                  {activeChatSession.artist_name ?? selectedArtist?.name ?? "—"}
+                </span>
+                <span className="chat-breadcrumb-sep" aria-hidden="true">
+                  /
+                </span>
+                <span className="chat-breadcrumb-item">
+                  {formatBreadcrumbDate(activeChatSession.created_at)}
+                </span>
+                <span className="chat-breadcrumb-sep" aria-hidden="true">
+                  /
+                </span>
+                <span className="chat-breadcrumb-item chat-breadcrumb-title">
+                  {activeChatSession.title}
+                </span>
+              </>
+            ) : null}
+          </nav>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={isProfilePanelOpen ? "Close artist profile" : "Open artist profile"}
+            aria-pressed={isProfilePanelOpen}
+            onClick={() => setIsProfilePanelOpen((open) => !open)}
+          >
+            <LayoutDashboard size={18} />
+          </button>
         </header>
 
         {isArtistOnboardingOpen ? (
@@ -650,7 +826,7 @@ export default function Home() {
                     disabled={isAddingArtist}
                     onClick={() => addArtist(result)}
                   >
-                    <span className="avatar-badge">{getInitials(result.name)}</span>
+                    <ArtistAvatar name={result.name} imageUrl={result.imageUrl} />
                     <span className="artist-result-main">
                       <span className="artist-result-name">{result.name}</span>
                       <span className="artist-result-meta">
@@ -735,21 +911,25 @@ export default function Home() {
               rows={3}
             />
             <div className="composer-footer">
-              {artists.length === 0 ? (
-                <button
-                  type="button"
-                  className="artist-menu-add artist-menu-add--inline"
-                  onClick={() => selectArtist(ADD_ARTIST_VALUE)}
-                >
-                  + Add artist
-                </button>
-              ) : (
-                <details className="artist-menu artist-menu--up artist-menu--inline">
-                  <summary aria-label="Artist">
-                    <span className="avatar-badge">{getInitials(selectedArtist?.name)}</span>
-                    <span>{selectedArtist?.name ?? "Select artist"}</span>
-                    <span className="menu-caret" />
-                  </summary>
+              <div className="composer-actions">
+                {artists.length === 0 ? (
+                  <button
+                    type="button"
+                    className="artist-menu-add artist-menu-add--inline"
+                    onClick={() => selectArtist(ADD_ARTIST_VALUE)}
+                  >
+                    + Add artist
+                  </button>
+                ) : (
+                  <details className="artist-menu artist-menu--up artist-menu--inline">
+                    <summary aria-label="Artist">
+                      <ArtistAvatar
+                        name={selectedArtist?.name}
+                        imageUrl={selectedArtist?.imageUrl}
+                      />
+                      <span>{selectedArtist?.name ?? "Select artist"}</span>
+                      <span className="menu-caret" />
+                    </summary>
                   <div className="artist-menu-popover">
                     {artists.map((artist) => (
                       <div
@@ -761,7 +941,7 @@ export default function Home() {
                           type="button"
                           onClick={() => selectArtist(artist.id)}
                         >
-                          <span className="avatar-badge">{getInitials(artist.name)}</span>
+                          <ArtistAvatar name={artist.name} imageUrl={artist.imageUrl} />
                           <span className="artist-menu-copy">
                             <span>{artist.name}</span>
                             {artist.socialHandle ? <span>@{artist.socialHandle}</span> : null}
@@ -787,18 +967,180 @@ export default function Home() {
                     </button>
                   </div>
                 </details>
-              )}
+                )}
+                <details className="artist-menu artist-menu--up artist-menu--inline data-source-menu">
+                  <summary aria-label="Data sources">
+                    <Plug size={14} aria-hidden="true" />
+                    <span>Data sources</span>
+                    <span className="menu-caret" />
+                  </summary>
+                  <div className="artist-menu-popover data-source-popover">
+                    {DATA_SOURCES.map((source) => (
+                      <button
+                        key={source.key}
+                        type="button"
+                        className="data-source-row"
+                      >
+                        <span
+                          className={`data-source-status ${
+                            source.connected ? "is-connected" : "is-disconnected"
+                          }`}
+                          aria-label={source.connected ? "Connected" : "Not connected"}
+                        />
+                        <span>{source.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              </div>
               <button
                 type="submit"
-                disabled={isSending || !draft.trim() || !selectedArtist}
+                className="composer-send"
+                disabled={!isSending && (!draft.trim() || !selectedArtist)}
+                aria-label={isSending ? "Stop generating" : "Send message"}
               >
-                {isSending ? "Sending" : "Send"}
+                {isSending ? (
+                  <Square size={12} fill="currentColor" aria-hidden="true" />
+                ) : (
+                  <ArrowUp size={18} aria-hidden="true" />
+                )}
               </button>
             </div>
           </form>
           {status ? <p className="status">{status}</p> : null}
         </div>
       </section>
+
+      {isProfilePanelOpen ? (
+        <aside className="artist-profile-panel" aria-label="Artist profile">
+          <header className="artist-profile-header">
+            <span className="artist-profile-eyebrow">Artist</span>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Close artist profile"
+              onClick={() => setIsProfilePanelOpen(false)}
+            >
+              <X size={16} />
+            </button>
+          </header>
+
+          {!selectedArtist ? (
+            <div className="artist-profile-empty">
+              Select an artist to view their profile.
+            </div>
+          ) : (
+            <div className="artist-profile-body">
+              <div className="artist-profile-identity">
+                <div className="artist-profile-avatar">
+                  {artistProfile?.imageUrl || selectedArtist.imageUrl ? (
+                    <img
+                      src={artistProfile?.imageUrl ?? selectedArtist.imageUrl ?? ""}
+                      alt={`${selectedArtist.name} avatar`}
+                    />
+                  ) : (
+                    <span>{getInitials(selectedArtist.name)}</span>
+                  )}
+                </div>
+                <h2 className="artist-profile-name">{selectedArtist.name}</h2>
+                {(artistProfile?.socialHandle ?? selectedArtist.socialHandle) ? (
+                  <p className="artist-profile-handle">
+                    @{artistProfile?.socialHandle ?? selectedArtist.socialHandle}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="artist-profile-stats">
+                <div className="artist-profile-stat">
+                  <span className="artist-profile-stat-icon">
+                    <SiSpotify size={14} color="#1DB954" />
+                  </span>
+                  <span className="artist-profile-stat-value">
+                    {formatStatNumber(artistProfile?.stats.spotify)}
+                  </span>
+                  <span className="artist-profile-stat-label">Spotify</span>
+                </div>
+                <div className="artist-profile-stat">
+                  <span className="artist-profile-stat-icon">
+                    <SiInstagram size={14} color="#E4405F" />
+                  </span>
+                  <span className="artist-profile-stat-value">
+                    {formatStatNumber(artistProfile?.stats.instagram)}
+                  </span>
+                  <span className="artist-profile-stat-label">Instagram</span>
+                </div>
+                <div className="artist-profile-stat">
+                  <span className="artist-profile-stat-icon">
+                    <SiTiktok size={14} color="#EE1D52" />
+                  </span>
+                  <span className="artist-profile-stat-value">
+                    {formatStatNumber(artistProfile?.stats.tiktok)}
+                  </span>
+                  <span className="artist-profile-stat-label">TikTok</span>
+                </div>
+                <div className="artist-profile-stat">
+                  <span className="artist-profile-stat-icon">
+                    <SiYoutube size={14} color="#FF0000" />
+                  </span>
+                  <span className="artist-profile-stat-value">
+                    {formatStatNumber(artistProfile?.stats.youtube)}
+                  </span>
+                  <span className="artist-profile-stat-label">YouTube</span>
+                </div>
+              </div>
+
+              {(artistProfile?.genres.length ?? selectedArtist.genres?.length ?? 0) > 0 ? (
+                <section className="artist-profile-section">
+                  <span className="artist-profile-section-label">Genre</span>
+                  <div className="artist-profile-tags">
+                    {(artistProfile?.genres ?? selectedArtist.genres ?? []).map((genre) => (
+                      <span key={genre} className="artist-profile-tag">
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {artistProfile?.subgenres.length ? (
+                <section className="artist-profile-section">
+                  <span className="artist-profile-section-label">Sound</span>
+                  <div className="artist-profile-tags">
+                    {artistProfile.subgenres.map((tag) => (
+                      <span key={tag} className="artist-profile-tag artist-profile-tag--soft">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              <section className="artist-profile-section">
+                <span className="artist-profile-section-label">Bio</span>
+                {isLoadingProfile && !artistProfile ? (
+                  <p className="artist-profile-bio is-loading">Loading bio…</p>
+                ) : artistProfile?.bio ? (
+                  <p className="artist-profile-bio">{artistProfile.bio}</p>
+                ) : (
+                  <p className="artist-profile-bio is-empty">No bio available.</p>
+                )}
+                {artistProfile?.hometown || artistProfile?.country ? (
+                  <div className="artist-profile-meta">
+                    <MapPin size={14} aria-hidden="true" />
+                    <span>
+                      {[artistProfile.hometown, artistProfile.country].filter(Boolean).join(", ")}
+                    </span>
+                  </div>
+                ) : null}
+              </section>
+
+              {profileError ? (
+                <p className="artist-profile-error">{profileError}</p>
+              ) : null}
+            </div>
+          )}
+        </aside>
+      ) : null}
     </main>
   );
 }

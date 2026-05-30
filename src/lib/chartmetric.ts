@@ -73,6 +73,13 @@ function extractPayload(value: unknown) {
   return record.obj ?? record.data ?? record;
 }
 
+function asLatestRecord(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    return asRecord(value[0]);
+  }
+  return asRecord(value);
+}
+
 function compactValue(value: unknown, key?: string) {
   if (typeof value === "number") return new Intl.NumberFormat("en-US").format(value);
   if (typeof value !== "string") return String(value ?? "");
@@ -448,6 +455,238 @@ function extractGenreNames(value: unknown) {
       return compactValue(record.name || record.genre || record.title);
     })
     .filter(Boolean);
+}
+
+export type ChartmetricArtistProfile = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  bio: string | null;
+  hometown: string | null;
+  country: string | null;
+  genres: string[];
+  subgenres: string[];
+  socialHandle: string | null;
+  stats: {
+    spotify: number | null;
+    instagram: number | null;
+    tiktok: number | null;
+    youtube: number | null;
+  };
+};
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function pickFirstNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = toFiniteNumber(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+// Handles the three shapes Chartmetric stat endpoints can return for a metric:
+//   1. flat:  { followers: 12345 }
+//   2. timeseries array: { followers: [{ value: 12345, timestp: "..." }] }
+//   3. wrapped object:  { followers: { value: 12345 } }
+function extractStatValue(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const raw = record[key];
+    if (raw == null) continue;
+
+    const direct = toFiniteNumber(raw);
+    if (direct !== null) return direct;
+
+    if (Array.isArray(raw) && raw.length) {
+      const first = raw[0];
+      const fromArrayDirect = toFiniteNumber(first);
+      if (fromArrayDirect !== null) return fromArrayDirect;
+      if (first && typeof first === "object") {
+        const nested = toFiniteNumber((first as Record<string, unknown>).value);
+        if (nested !== null) return nested;
+      }
+      continue;
+    }
+
+    if (typeof raw === "object") {
+      const nested = toFiniteNumber((raw as Record<string, unknown>).value);
+      if (nested !== null) return nested;
+    }
+  }
+
+  return null;
+}
+
+function pickFirstString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const trimmed = compactValue(record[key]);
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function extractNameList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        return compactValue((item as Record<string, unknown>).name);
+      }
+      return "";
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function extractMarketCount(audience: unknown): number | null {
+  // The endpoint may return either { cities, countries } or a bare array
+  // depending on the Chartmetric variant — handle both.
+  const root = Array.isArray(audience) ? { cities: audience } : asRecord(audience);
+
+  const countryCandidates = asArray(root.audience_by_country ?? root.countries);
+  if (countryCandidates.length) {
+    const unique = new Set(
+      countryCandidates
+        .map((entry) =>
+          pickFirstString(entry, ["country", "country_name", "code2", "code", "name"]),
+        )
+        .filter((value): value is string => Boolean(value)),
+    );
+    if (unique.size) return unique.size;
+  }
+
+  const cityCandidates = asArray(root.audience_by_city ?? root.cities ?? root.data);
+  if (cityCandidates.length) {
+    const unique = new Set(
+      cityCandidates
+        .map((entry) => pickFirstString(entry, ["country", "country_name", "code2", "code"]))
+        .filter((value): value is string => Boolean(value)),
+    );
+    if (unique.size) return unique.size;
+  }
+
+  return null;
+}
+
+export async function fetchChartmetricArtistProfile(
+  artistId: string,
+): Promise<ChartmetricArtistProfile> {
+  const encoded = encodeURIComponent(artistId);
+  const profilePayload = asRecord(extractPayload(await chartmetricGet(`/api/artist/${encoded}`)));
+  if (process.env.CHARTMETRIC_DEBUG === "1") {
+    console.log(
+      `[chartmetric] profile keys for ${artistId}:`,
+      Object.keys(profilePayload),
+      "cm_statistics:",
+      JSON.stringify(profilePayload.cm_statistics).slice(0, 400),
+    );
+  }
+  async function fetchStatRecord(source: string) {
+    try {
+      const payload = await chartmetricGet(`/api/artist/${encoded}/stat/${source}?latest=true`);
+      return asLatestRecord(extractPayload(payload));
+    } catch (error) {
+      console.warn(`[chartmetric] ${source} stats fetch failed for ${artistId}:`, error);
+      return {} as Record<string, unknown>;
+    }
+  }
+
+  const [spotifyRecord, instagramRecord, tiktokRecord, youtubeRecord] = await Promise.all([
+    fetchStatRecord("spotify"),
+    fetchStatRecord("instagram"),
+    fetchStatRecord("tiktok"),
+    fetchStatRecord("youtube_channel"),
+  ]);
+
+  if (process.env.CHARTMETRIC_DEBUG === "1") {
+    console.log(
+      `[chartmetric] platform stat keys for ${artistId}:`,
+      JSON.stringify({
+        spotify: Object.keys(spotifyRecord),
+        instagram: Object.keys(instagramRecord),
+        tiktok: Object.keys(tiktokRecord),
+        youtube: Object.keys(youtubeRecord),
+      }),
+    );
+  }
+
+  const cmStatistics = asRecord(profilePayload.cm_statistics);
+
+  const genres = extractNameList(profilePayload.genres);
+  const subgenres = [
+    ...extractNameList(profilePayload.subgenres),
+    ...extractNameList(profilePayload.sub_genres),
+    ...extractNameList(profilePayload.tags),
+  ];
+  const uniqueSubgenres = Array.from(
+    new Set(subgenres.filter((entry) => !genres.includes(entry))),
+  );
+
+  return {
+    id: artistId,
+    name: pickFirstString(profilePayload, ["name", "artist_name"]) ?? "",
+    imageUrl: pickFirstString(profilePayload, [
+      "image_url",
+      "spotify_image_url",
+      "image_url_lg",
+    ]),
+    bio: pickFirstString(profilePayload, ["description", "bio", "summary"]),
+    hometown: pickFirstString(profilePayload, ["hometown", "city"]),
+    country: pickFirstString(profilePayload, ["country", "code2", "country_code"]),
+    genres,
+    subgenres: uniqueSubgenres,
+    socialHandle: extractSocialHandle(profilePayload),
+    stats: {
+      spotify:
+        extractStatValue(spotifyRecord, [
+          "listeners",
+          "monthly_listeners",
+          "sp_monthly_listeners",
+        ]) ??
+        extractStatValue(cmStatistics, [
+          "sp_monthly_listeners",
+          "spotify_monthly_listeners",
+          "monthly_listeners",
+        ]) ??
+        extractStatValue(profilePayload, [
+          "sp_monthly_listeners",
+          "spotify_monthly_listeners",
+          "monthly_listeners",
+        ]),
+      instagram:
+        extractStatValue(instagramRecord, ["followers", "ig_followers", "instagram_followers"]) ??
+        extractStatValue(cmStatistics, ["ig_followers", "instagram_followers"]) ??
+        extractStatValue(profilePayload, ["ig_followers", "instagram_followers"]),
+      tiktok:
+        extractStatValue(tiktokRecord, ["followers", "tt_followers", "tiktok_followers"]) ??
+        extractStatValue(cmStatistics, ["tt_followers", "tiktok_followers"]) ??
+        extractStatValue(profilePayload, ["tt_followers", "tiktok_followers"]),
+      youtube:
+        extractStatValue(youtubeRecord, [
+          "subscribers",
+          "subscriber_count",
+          "ycs_subscribers",
+          "youtube_subscribers",
+        ]) ??
+        extractStatValue(cmStatistics, [
+          "ycs_subscribers",
+          "ycg_subscribers",
+          "youtube_subscribers",
+        ]) ??
+        extractStatValue(profilePayload, [
+          "ycs_subscribers",
+          "ycg_subscribers",
+          "youtube_subscribers",
+        ]),
+    },
+  };
 }
 
 export async function searchChartmetricArtists(query: string, limit = 10) {

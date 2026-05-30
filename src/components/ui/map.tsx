@@ -1547,6 +1547,24 @@ type MapClusterLayerProps<
     coordinates: [number, number],
     pointCount: number,
   ) => void;
+  /** MapLibre clusterProperties aggregations, e.g. `{ sum_fans: ["+", ["get", "fans"]] }`. When set, the cluster gains a new property aggregated across its members. */
+  clusterAggregations?: Record<string, unknown>;
+  /** Property name to size & color clusters by (default: "point_count"). Combine with `clusterAggregations` to size by a derived metric. */
+  clusterSizeProperty?: string;
+  /** Pixel radii for cluster steps: [small, medium, large] (default: [20, 30, 40]) */
+  clusterRadii?: [number, number, number];
+  /** Custom text-field expression for the cluster label (default: "{point_count_abbreviated}") */
+  clusterLabel?: unknown;
+  /** Property name to size & color unclustered points by. When set, each point becomes a graduated symbol. */
+  pointSizeProperty?: string;
+  /** Pixel radii for point steps: [small, medium, large] (default: [5, 5, 5] — i.e. fixed) */
+  pointRadii?: [number, number, number];
+  /** Colors for unclustered points: [small, medium, large]. Falls back to `pointColor` when not set. */
+  pointColors?: [string, string, string];
+  /** Thresholds for the point property steps (defaults to clusterThresholds). */
+  pointThresholds?: [number, number];
+  /** Custom text-field expression for unclustered point labels. */
+  pointLabel?: unknown;
 };
 
 function MapClusterLayer<
@@ -1560,7 +1578,64 @@ function MapClusterLayer<
   pointColor = "#3b82f6",
   onPointClick,
   onClusterClick,
+  clusterAggregations,
+  clusterSizeProperty,
+  clusterRadii = [20, 30, 40],
+  clusterLabel,
+  pointSizeProperty,
+  pointRadii,
+  pointColors,
+  pointThresholds,
+  pointLabel,
 }: MapClusterLayerProps<P>) {
+  const sizeProp = clusterSizeProperty ?? "point_count";
+  const labelExpr = clusterLabel ?? "{point_count_abbreviated}";
+  const colorExpr = [
+    "step",
+    ["get", sizeProp],
+    clusterColors[0],
+    clusterThresholds[0],
+    clusterColors[1],
+    clusterThresholds[1],
+    clusterColors[2],
+  ];
+  const radiusExpr = [
+    "step",
+    ["get", sizeProp],
+    clusterRadii[0],
+    clusterThresholds[0],
+    clusterRadii[1],
+    clusterThresholds[1],
+    clusterRadii[2],
+  ];
+
+  // Unclustered point paint: when pointSizeProperty is set the points become
+  // a graduated proportional-symbol map. Otherwise stays at a fixed 5px dot.
+  const effectivePointThresholds = pointThresholds ?? clusterThresholds;
+  const effectivePointColors = pointColors ?? null;
+  const effectivePointRadii = pointRadii ?? null;
+  const pointRadiusExpr = pointSizeProperty && effectivePointRadii
+    ? [
+        "step",
+        ["get", pointSizeProperty],
+        effectivePointRadii[0],
+        effectivePointThresholds[0],
+        effectivePointRadii[1],
+        effectivePointThresholds[1],
+        effectivePointRadii[2],
+      ]
+    : 5;
+  const pointColorExpr = pointSizeProperty && effectivePointColors
+    ? [
+        "step",
+        ["get", pointSizeProperty],
+        effectivePointColors[0],
+        effectivePointThresholds[0],
+        effectivePointColors[1],
+        effectivePointThresholds[1],
+        effectivePointColors[2],
+      ]
+    : pointColor;
   const { map, isLoaded } = useMap();
   const id = useId();
   const sourceId = `cluster-source-${id}`;
@@ -1585,7 +1660,8 @@ function MapClusterLayer<
       cluster: true,
       clusterMaxZoom,
       clusterRadius,
-    });
+      ...(clusterAggregations ? { clusterProperties: clusterAggregations } : {}),
+    } as MapLibreGL.SourceSpecification);
 
     // Add cluster circles layer
     map.addLayer({
@@ -1594,24 +1670,8 @@ function MapClusterLayer<
       source: sourceId,
       filter: ["has", "point_count"],
       paint: {
-        "circle-color": [
-          "step",
-          ["get", "point_count"],
-          clusterColors[0],
-          clusterThresholds[0],
-          clusterColors[1],
-          clusterThresholds[1],
-          clusterColors[2],
-        ],
-        "circle-radius": [
-          "step",
-          ["get", "point_count"],
-          20,
-          clusterThresholds[0],
-          30,
-          clusterThresholds[1],
-          40,
-        ],
+        "circle-color": colorExpr as MapLibreGL.DataDrivenPropertyValueSpecification<string>,
+        "circle-radius": radiusExpr as MapLibreGL.DataDrivenPropertyValueSpecification<number>,
         "circle-stroke-width": 1,
         "circle-stroke-color": "#fff",
         "circle-opacity": 0.85,
@@ -1625,7 +1685,7 @@ function MapClusterLayer<
       source: sourceId,
       filter: ["has", "point_count"],
       layout: {
-        "text-field": "{point_count_abbreviated}",
+        "text-field": labelExpr as MapLibreGL.PropertyValueSpecification<string>,
         "text-font": ["Open Sans"],
         "text-size": 12,
       },
@@ -1641,15 +1701,37 @@ function MapClusterLayer<
       source: sourceId,
       filter: ["!", ["has", "point_count"]],
       paint: {
-        "circle-color": pointColor,
-        "circle-radius": 5,
-        "circle-stroke-width": 2,
+        "circle-color":
+          pointColorExpr as MapLibreGL.DataDrivenPropertyValueSpecification<string>,
+        "circle-radius":
+          pointRadiusExpr as MapLibreGL.DataDrivenPropertyValueSpecification<number>,
+        "circle-stroke-width": pointSizeProperty ? 1 : 2,
         "circle-stroke-color": "#fff",
+        "circle-opacity": pointSizeProperty ? 0.85 : 1,
       },
     });
 
+    if (pointLabel) {
+      map.addLayer({
+        id: `${unclusteredLayerId}-label`,
+        type: "symbol",
+        source: sourceId,
+        filter: ["!", ["has", "point_count"]],
+        layout: {
+          "text-field": pointLabel as MapLibreGL.PropertyValueSpecification<string>,
+          "text-font": ["Open Sans"],
+          "text-size": 12,
+        },
+        paint: {
+          "text-color": "#fff",
+        },
+      });
+    }
+
     return () => {
       try {
+        const pointLabelLayerId = `${unclusteredLayerId}-label`;
+        if (map.getLayer(pointLabelLayerId)) map.removeLayer(pointLabelLayerId);
         if (map.getLayer(clusterCountLayerId))
           map.removeLayer(clusterCountLayerId);
         if (map.getLayer(unclusteredLayerId))
@@ -1684,24 +1766,8 @@ function MapClusterLayer<
 
     // Update cluster layer colors and sizes
     if (map.getLayer(clusterLayerId) && colorsChanged) {
-      map.setPaintProperty(clusterLayerId, "circle-color", [
-        "step",
-        ["get", "point_count"],
-        clusterColors[0],
-        clusterThresholds[0],
-        clusterColors[1],
-        clusterThresholds[1],
-        clusterColors[2],
-      ]);
-      map.setPaintProperty(clusterLayerId, "circle-radius", [
-        "step",
-        ["get", "point_count"],
-        20,
-        clusterThresholds[0],
-        30,
-        clusterThresholds[1],
-        40,
-      ]);
+      map.setPaintProperty(clusterLayerId, "circle-color", colorExpr);
+      map.setPaintProperty(clusterLayerId, "circle-radius", radiusExpr);
     }
 
     // Update unclustered point layer color

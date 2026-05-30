@@ -34,6 +34,24 @@ export type ArtistSearchResult = {
   socialHandle?: string | null;
 };
 
+export type ArtistProfile = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  bio: string | null;
+  hometown: string | null;
+  country: string | null;
+  genres: string[];
+  subgenres: string[];
+  socialHandle: string | null;
+  stats: {
+    spotify: number | null;
+    instagram: number | null;
+    tiktok: number | null;
+    youtube: number | null;
+  };
+};
+
 export type ModelSelection = {
   providerID: string;
   modelID: string;

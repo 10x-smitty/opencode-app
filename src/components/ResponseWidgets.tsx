@@ -60,11 +60,21 @@ const POINT_NOUN: Record<MapKind, string> = {
   clusters: "Location",
 };
 
+// Per-kind accent: markers, route line, and popup TrendingUp icon.
+// Clusters use the mapcn default density palette, so no entry needed.
+const MAP_KIND_COLOR: Record<Exclude<MapKind, "clusters">, string> = {
+  markets: "#fbbf24", // amber-400
+  venues: "#ef4444", // red-500
+  routing: "#3b82f6", // blue-500
+};
+
 type ClusterPointProperties = {
   name: string;
   index: number;
   value?: string | number;
   label?: string;
+  /** Numeric fan count for this market — used as the per-point aggregation source. */
+  fans: number;
 };
 
 type ChartDatum = {
@@ -252,12 +262,14 @@ function PointPopupBody({
   name,
   value,
   label,
+  accentColor,
 }: {
   pointNoun: string;
   index: number;
   name: string;
   value?: string | number;
   label?: string;
+  accentColor: string;
 }) {
   return (
     <div className="space-y-2 p-3">
@@ -269,7 +281,7 @@ function PointPopupBody({
       </div>
       {value !== undefined && value !== "" ? (
         <div className="flex items-center gap-1.5 text-sm">
-          <TrendingUp className="size-3.5 text-amber-400" />
+          <TrendingUp className="size-3.5" style={{ color: accentColor }} />
           <span className="font-medium">{formatCell(value)}</span>
         </div>
       ) : null}
@@ -287,6 +299,8 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
   const mapKind: MapKind =
     widget.mapKind && widget.mapKind in POINT_NOUN ? widget.mapKind : "markets";
   const pointNoun = POINT_NOUN[mapKind];
+  const accentColor =
+    mapKind === "clusters" ? MAP_KIND_COLOR.markets : MAP_KIND_COLOR[mapKind];
 
   const validPoints = useMemo<ValidMapPoint[]>(
     () =>
@@ -317,6 +331,7 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
             ? point.value
             : undefined,
           label: point.label,
+          fans: Math.max(0, Math.round(point.numericValue)) || 0,
         },
       })),
     };
@@ -371,9 +386,31 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
               <>
                 <MapClusterLayer<ClusterPointProperties>
                   data={clusterFeatures}
-                  clusterColors={["#FCD34D", "#FBBF24", "#F59E0B"]}
-                  clusterThresholds={[10, 30]}
-                  pointColor="#FBBF24"
+                  clusterRadius={0}
+                  clusterThresholds={[50_000, 500_000]}
+                  pointSizeProperty="fans"
+                  pointRadii={[18, 28, 40]}
+                  pointThresholds={[50_000, 500_000]}
+                  pointColors={["#22c55e", "#eab308", "#ef4444"]}
+                  pointLabel={[
+                    "case",
+                    [">=", ["get", "fans"], 1_000_000],
+                    [
+                      "concat",
+                      [
+                        "to-string",
+                        ["/", ["floor", ["/", ["get", "fans"], 100_000]], 10],
+                      ],
+                      "M",
+                    ],
+                    [">=", ["get", "fans"], 1_000],
+                    [
+                      "concat",
+                      ["to-string", ["floor", ["/", ["get", "fans"], 1_000]]],
+                      "K",
+                    ],
+                    ["to-string", ["get", "fans"]],
+                  ]}
                   onPointClick={(feature, coordinates) => {
                     const properties = feature.properties;
                     if (!properties) return;
@@ -397,6 +434,7 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                       name={selectedClusterPoint.properties.name}
                       value={selectedClusterPoint.properties.value}
                       label={selectedClusterPoint.properties.label}
+                      accentColor={accentColor}
                     />
                   </MapPopup>
                 ) : null}
@@ -406,7 +444,7 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                 {routeCoordinates.length >= 2 ? (
                   <MapRoute
                     coordinates={routeCoordinates}
-                    color="#FBBF24"
+                    color={accentColor}
                     width={3}
                     opacity={0.9}
                     dashArray={[2, 2]}
@@ -420,7 +458,10 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                     latitude={point.latitude}
                   >
                     <MarkerContent>
-                      <div className="bg-amber-400 border-white text-background relative flex size-5 cursor-pointer items-center justify-center rounded-full border-2 text-[10px] font-semibold shadow-lg transition-transform hover:scale-110">
+                      <div
+                        className="border-white relative flex size-5 cursor-pointer items-center justify-center rounded-full border-2 text-[10px] font-semibold text-white shadow-lg transition-transform hover:scale-110"
+                        style={{ backgroundColor: accentColor }}
+                      >
                         {mapKind === "routing" ? index + 1 : null}
                       </div>
                       <MarkerLabel position="bottom">{point.name}</MarkerLabel>
@@ -432,6 +473,7 @@ function DataMapWidget({ widget }: { widget: MapWidget }) {
                         name={point.name}
                         value={point.value}
                         label={point.label}
+                        accentColor={accentColor}
                       />
                     </MarkerPopup>
                   </MapMarker>
